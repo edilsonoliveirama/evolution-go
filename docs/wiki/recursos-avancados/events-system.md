@@ -134,24 +134,35 @@ Host: meu-servidor.com
 Content-Type: application/json
 ```
 
-**Body**:
+**Body** (formato real, confirmado em `pkg/whatsmeow/service/whatsmeow.go` —
+note que é `instanceId`/`instanceName`/`instanceToken` no nível raiz, não
+`instance`, e o conteúdo da mensagem fica em `data.Info` / `data.Message`, não
+em `data.key` / `data.message`):
 ```json
 {
-  "event": "MESSAGE",
-  "instance": "vendas",
+  "event": "Message",
+  "instanceId": "abc-123-def-456",
+  "instanceName": "vendas",
+  "instanceToken": "token-vendas-123",
   "data": {
-    "key": {
-      "remoteJid": "5511999999999@s.whatsapp.net",
-      "fromMe": false,
-      "id": "3EB0C5A277F7F9B6C599"
+    "Info": {
+      "Chat": "5511999999999@s.whatsapp.net",
+      "Sender": "5511999999999@s.whatsapp.net",
+      "IsFromMe": false,
+      "IsGroup": false,
+      "PushName": "Nome do Contato",
+      "Timestamp": "2026-09-25T09:44:06-03:00",
+      "Type": "text"
     },
-    "message": {
+    "Message": {
       "conversation": "Olá!"
-    },
-    "messageTimestamp": "1699999999"
+    }
   }
 }
 ```
+
+> Para o caso de uso de capturar e transcrever conversas (texto e áudio), veja
+> o guia dedicado: [Capturar e Transcrever Conversas](../guias-api/transcricao-chats.md).
 
 ### Implementação no Servidor Receptor
 
@@ -163,15 +174,15 @@ const app = express();
 app.use(express.json());
 
 app.post('/webhook', (req, res) => {
-    const { event, instance, data } = req.body;
+    const { event, instanceName, data } = req.body;
     
-    console.log(`Evento recebido: ${event} da instância ${instance}`);
+    console.log(`Evento recebido: ${event} da instância ${instanceName}`);
     console.log('Dados:', JSON.stringify(data, null, 2));
     
-    // Processa evento
-    if (event === 'MESSAGE') {
-        const message = data.message.conversation;
-        const from = data.key.remoteJid;
+    // Processa evento (nomes de campo com case exato: "Message", "Info", "Message")
+    if (event === 'Message') {
+        const message = data.Message?.conversation || data.Message?.extendedTextMessage?.text;
+        const from = data.Info?.Chat;
         console.log(`Mensagem de ${from}: ${message}`);
     }
     
@@ -192,14 +203,15 @@ app = Flask(__name__)
 def webhook():
     data = request.json
     event = data.get('event')
-    instance = data.get('instance')
-    payload = data.get('data')
+    instance_name = data.get('instanceName')
+    payload = data.get('data', {})
     
-    print(f"Evento recebido: {event} da instância {instance}")
+    print(f"Evento recebido: {event} da instância {instance_name}")
     
-    if event == 'MESSAGE':
-        message = payload.get('message', {}).get('conversation')
-        from_jid = payload.get('key', {}).get('remoteJid')
+    if event == 'Message':
+        msg = payload.get('Message', {})
+        message = msg.get('conversation') or msg.get('extendedTextMessage', {}).get('text')
+        from_jid = payload.get('Info', {}).get('Chat')
         print(f"Mensagem de {from_jid}: {message}")
     
     return jsonify({'received': True}), 200
@@ -492,7 +504,8 @@ ws.onmessage = (event) => {
     
     if (data.queue === 'message') {
         const message = JSON.parse(data.payload);
-        console.log('Nova mensagem:', message.data.message.conversation);
+        const text = message.data.Message?.conversation || message.data.Message?.extendedTextMessage?.text;
+        console.log('Nova mensagem:', text);
     }
 };
 
@@ -720,8 +733,10 @@ O Evolution GO usa dois níveis de classificação de eventos:
 
 ```json
 {
-  "event": "MESSAGE",
-  "instance": "nome-da-instancia",
+  "event": "Message",
+  "instanceId": "uuid-da-instancia",
+  "instanceName": "nome-da-instancia",
+  "instanceToken": "token-da-instancia",
   "data": {
     // ... dados específicos do evento
   }
@@ -732,22 +747,29 @@ O Evolution GO usa dois níveis de classificação de eventos:
 
 ```json
 {
-  "event": "MESSAGE",
-  "instance": "vendas",
+  "event": "Message",
+  "instanceId": "abc-123",
+  "instanceName": "vendas",
+  "instanceToken": "token-vendas-123",
   "data": {
-    "key": {
-      "remoteJid": "5511999999999@s.whatsapp.net",
-      "fromMe": false,
-      "id": "3EB0C5A277F7F9B6C599"
+    "Info": {
+      "Chat": "5511999999999@s.whatsapp.net",
+      "Sender": "5511999999999@s.whatsapp.net",
+      "IsFromMe": false,
+      "IsGroup": false,
+      "PushName": "João Silva",
+      "Timestamp": "2026-09-25T10:00:00-03:00",
+      "Type": "text"
     },
-    "message": {
+    "Message": {
       "conversation": "Olá! Gostaria de informações sobre produtos."
-    },
-    "messageTimestamp": "1699999999",
-    "pushName": "João Silva"
+    }
   }
 }
 ```
+
+> Guia dedicado para captura de texto e áudio para transcrição:
+> [Capturar e Transcrever Conversas](../guias-api/transcricao-chats.md).
 
 ### Exemplo: Grupo Criado
 
@@ -877,8 +899,8 @@ python rabbitmq-consumer.py
             const payload = JSON.parse(data.payload);
             
             if (data.queue === 'message') {
-                const message = payload.data.message.conversation;
-                const from = payload.data.pushName;
+                const message = payload.data.Message?.conversation || payload.data.Message?.extendedTextMessage?.text;
+                const from = payload.data.Info?.PushName;
                 
                 const div = document.getElementById('messages');
                 div.innerHTML += `<p><strong>${from}:</strong> ${message}</p>`;

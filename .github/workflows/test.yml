@@ -1,0 +1,32 @@
+name: Test
+
+on:
+  workflow_call:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install C dependencies (webp/jpeg, needed for CGO build)
+        run: sudo apt-get update && sudo apt-get install -y libwebp-dev libjpeg-turbo8-dev
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Build
+        run: CGO_ENABLED=1 go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...

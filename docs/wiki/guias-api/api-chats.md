@@ -311,9 +311,18 @@ Solicita sincronização de histórico de mensagens antigas (WhatsApp Multi-Devi
 | `messageInfo.Timestamp` | string | ✅ Sim | Timestamp da mensagem |
 | `count` | int | ✅ Sim | Número de mensagens para sincronizar |
 
-**Nota**: Este endpoint é usado para sincronizar mensagens antigas do histórico do WhatsApp Multi-Device. Requer uma mensagem de referência válida.
+> ⚠️ **Importante**: a resposta abaixo confirma apenas que o **pedido** de
+> sincronização foi enviado ao dispositivo companheiro (celular) — é o retorno
+> do envio da solicitação via protocolo WhatsApp, não as mensagens em si. As
+> mensagens antigas, quando o celular responde, chegam depois de forma
+> assíncrona como o evento `HistorySync`. **No estado atual do código
+> (`pkg/whatsmeow/service/whatsmeow.go`), esse evento é apenas logado
+> internamente e não é repassado ao webhook/API** — ou seja, hoje não há como
+> obter o conteúdo do histórico sincronizado através da API. Veja
+> [Capturar e Transcrever Conversas](./transcricao-chats.md#histórico-retroativo-limitação-atual)
+> para detalhes e alternativas.
 
-**Resposta de Sucesso (200)**:
+**Resposta de Sucesso (200)** — confirma o envio do pedido, não o conteúdo do histórico:
 ```json
 {
   "message": "success",

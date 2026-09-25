@@ -88,6 +88,7 @@ Referência completa de todos os endpoints disponíveis.
 | [**Comunidades**](./guias-api/api-community.md) | 3 | Criar e gerenciar comunidades |
 | [**Newsletters**](./guias-api/api-newsletter.md) | 6 | Canais do WhatsApp |
 | [**Webhooks**](./guias-api/api-webhooks.md) | - | Configurar eventos em tempo real |
+| [**Transcrição de Chats**](./guias-api/transcricao-chats.md) | - | Capturar texto e áudio em tempo real para transcrição |
 
 ### 🚀 Recursos Avançados
 
