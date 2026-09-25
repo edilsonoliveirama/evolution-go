@@ -1,4 +1,6 @@
 .env
+.env.*
+docker-compose.local.yml
 logs/*
 build/
 *.prof

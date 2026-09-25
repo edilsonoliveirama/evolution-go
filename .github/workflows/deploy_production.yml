@@ -1,0 +1,37 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          command_timeout: 20m
+          script: |
+            set -e
+            PROJECT_DIR="/opt/composedir/evo-go"
+            cd "$PROJECT_DIR"
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Building images..."
+            docker compose -f docker-compose.prod.yml build
+
+            echo "Starting containers..."
+            docker compose -f docker-compose.prod.yml up -d
+
+            echo "Cleaning up unused images, networks and build cache..."
+            docker system prune -a -f
+
+            echo "Deploy complete!"
+            docker compose -f docker-compose.prod.yml ps

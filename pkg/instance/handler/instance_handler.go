@@ -9,6 +9,7 @@ import (
 	config "github.com/evolution-foundation/evolution-go/pkg/config"
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
 	instance_service "github.com/evolution-foundation/evolution-go/pkg/instance/service"
+	"github.com/evolution-foundation/evolution-go/pkg/metrics"
 	"github.com/evolution-foundation/evolution-go/pkg/utils"
 )
 
@@ -22,6 +23,7 @@ type InstanceHandler interface {
 	Status(ctx *gin.Context)
 	Qr(ctx *gin.Context)
 	All(ctx *gin.Context)
+	Stats(ctx *gin.Context)
 	Info(ctx *gin.Context)
 	Pair(ctx *gin.Context)
 	SetProxy(ctx *gin.Context)
@@ -347,6 +349,48 @@ func (i *instanceHandler) All(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "success", "data": instances})
+}
+
+// Get dashboard stats
+// @Summary Get dashboard stats
+// @Description Get aggregated stats for the dashboard: instance counts and message throughput since server start
+// @Tags Instance
+// @Accept json
+// @Produce json
+// @Success 200 {object} gin.H "Dashboard stats"
+// @Failure 500 {object} gin.H "Internal server error"
+// @Router /instance/stats [get]
+func (i *instanceHandler) Stats(ctx *gin.Context) {
+	instances, err := i.instanceService.GetAll()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	connected := 0
+	for _, inst := range instances {
+		if inst.Connected {
+			connected++
+		}
+	}
+
+	uptime := metrics.Uptime()
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"instances": gin.H{
+				"total":        len(instances),
+				"connected":    connected,
+				"disconnected": len(instances) - connected,
+			},
+			"messages": gin.H{
+				"sent":     metrics.MessagesSent(),
+				"received": metrics.MessagesReceived(),
+			},
+			"uptimeSeconds": int64(uptime.Seconds()),
+		},
+	})
 }
 
 // Get instance

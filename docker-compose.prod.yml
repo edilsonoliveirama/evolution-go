@@ -1,0 +1,34 @@
+services:
+  evolution-go:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-prod}
+    container_name: evolution-go
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - evolution_data:/app/dbdata
+      - evolution_logs:/app/logs
+    networks:
+      - traefik-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
+      - "traefik.http.routers.hub-ia-emc.rule=Host(`hub.emcsolucoes.com.br`)"
+      - "traefik.http.routers.hub-ia-emc.entrypoints=websecure"
+      - "traefik.http.routers.hub-ia-emc.tls=true"
+      - "traefik.http.routers.hub-ia-emc.tls.certresolver=myresolver"
+      - "traefik.http.routers.hub-ia-emc.priority=100"
+      - "traefik.http.services.hub-ia-emc.loadbalancer.server.port=4000"
+
+volumes:
+  evolution_data:
+    driver: local
+  evolution_logs:
+    driver: local
+
+networks:
+  traefik-net:
+    external: true

@@ -23,6 +23,7 @@ import (
 	"github.com/chai2010/webp"
 	config "github.com/evolution-foundation/evolution-go/pkg/config"
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
+	"github.com/evolution-foundation/evolution-go/pkg/metrics"
 	logger_wrapper "github.com/evolution-foundation/evolution-go/pkg/logger"
 	"github.com/evolution-foundation/evolution-go/pkg/utils"
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
@@ -2777,6 +2778,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 	}
 
 	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent successfully! ServerID: %d", instance.Id, response.ServerID)
+	metrics.RecordMessageSent()
 
 	messageInfo := types.MessageInfo{
 		MessageSource: types.MessageSource{
