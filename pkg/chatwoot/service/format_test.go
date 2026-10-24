@@ -146,3 +146,17 @@ func TestWhatsappMediaType(t *testing.T) {
 		}
 	}
 }
+
+func TestConversationResolvedPayload(t *testing.T) {
+	// Shape of conversation_status_changed sent to API inboxes (Chatwoot 4.19).
+	body := `{"event":"conversation_status_changed","id":8,"status":"resolved","inbox_id":1,
+		"meta":{"sender":{"identifier":"5521966453000@s.whatsapp.net","phone_number":"+5521966453000"}}}`
+	var hook cwWebhook
+	if err := json.Unmarshal([]byte(body), &hook); err != nil {
+		t.Fatal(err)
+	}
+	jid, err := metaJID(hook.Meta)
+	if hook.Status != "resolved" || err != nil || jid.String() != "5521966453000@s.whatsapp.net" {
+		t.Fatalf("status=%q jid=%v err=%v", hook.Status, jid, err)
+	}
+}

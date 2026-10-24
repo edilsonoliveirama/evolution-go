@@ -50,10 +50,19 @@ func (f *flexMessageType) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+type cwWebhookMeta struct {
+	Sender struct {
+		Identifier  string `json:"identifier"`
+		PhoneNumber string `json:"phone_number"`
+	} `json:"sender"`
+}
+
 type cwWebhook struct {
 	Event             string                 `json:"event"`
 	ID                int                    `json:"id"`
 	Content           string                 `json:"content"`
+	Status            string                 `json:"status"` // conversation_status_changed
+	Meta              cwWebhookMeta          `json:"meta"`   // conversation_status_changed
 	MessageType       flexMessageType        `json:"message_type"`
 	Private           bool                   `json:"private"`
 	SourceID          string                 `json:"source_id"`
@@ -64,13 +73,8 @@ type cwWebhook struct {
 		Type          string `json:"type"`
 	} `json:"sender"`
 	Conversation struct {
-		ID   int `json:"id"`
-		Meta struct {
-			Sender struct {
-				Identifier  string `json:"identifier"`
-				PhoneNumber string `json:"phone_number"`
-			} `json:"sender"`
-		} `json:"meta"`
+		ID   int           `json:"id"`
+		Meta cwWebhookMeta `json:"meta"`
 	} `json:"conversation"`
 	Attachments []struct {
 		FileType string `json:"file_type"`
@@ -104,6 +108,13 @@ func (s *chatwootService) HandleWebhook(instanceID, secret string, body []byte) 
 		if deleted, _ := hook.ContentAttributes["deleted"].(bool); !deleted {
 			return nil
 		}
+	case "conversation_status_changed":
+		if hook.Status == "resolved" && s.onResolved != nil {
+			if chat, err := metaJID(hook.Meta); err == nil {
+				s.onResolved(instanceID, chat)
+			}
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -295,7 +306,11 @@ func (s *chatwootService) privateNote(cfg *chatwoot_model.ChatwootConfig, conver
 }
 
 func destinationJID(hook *cwWebhook) (types.JID, error) {
-	sender := hook.Conversation.Meta.Sender
+	return metaJID(hook.Conversation.Meta)
+}
+
+func metaJID(meta cwWebhookMeta) (types.JID, error) {
+	sender := meta.Sender
 	if strings.Contains(sender.Identifier, "@") {
 		if jid, err := types.ParseJID(sender.Identifier); err == nil && isSupportedChat(jid) {
 			return jid.ToNonAD(), nil

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"net/url"
 	"strings"
 	"sync"
@@ -15,11 +14,13 @@ import (
 
 	"github.com/patrickmn/go-cache"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/types"
 
 	chatwoot_model "github.com/evolution-foundation/evolution-go/pkg/chatwoot/model"
 	chatwoot_repository "github.com/evolution-foundation/evolution-go/pkg/chatwoot/repository"
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
 	instance_repository "github.com/evolution-foundation/evolution-go/pkg/instance/repository"
+	"github.com/evolution-foundation/evolution-go/pkg/internal/workqueue"
 	logger_wrapper "github.com/evolution-foundation/evolution-go/pkg/logger"
 	send_service "github.com/evolution-foundation/evolution-go/pkg/sendMessage/service"
 )
@@ -38,6 +39,12 @@ type ChatwootService interface {
 
 	// HandleWhatsappEvent implements whatsmeow_service.EventListener.
 	HandleWhatsappEvent(instance *instance_model.Instance, client *whatsmeow.Client, evt interface{})
+
+	// HandoffToAgent opens the chat's conversation for the agents (e.g. when a
+	// bot flow ends). Implements typebot_service.Handoff.
+	HandoffToAgent(instanceID string, chat types.JID)
+	// OnConversationResolved registers a callback for conversations resolved in Chatwoot.
+	OnConversationResolved(fn func(instanceID string, chat types.JID))
 }
 
 // ConfigInput is the payload accepted from the manager to configure the integration.
@@ -85,8 +92,9 @@ type chatwootService struct {
 
 	convLocks sync.Map // instanceID|chatJID -> *sync.Mutex
 
-	poolsMu sync.Mutex
-	pools   map[string][]chan func()
+	queue *workqueue.Queue
+
+	onResolved func(instanceID string, chat types.JID)
 }
 
 const workersPerInstance = 4
@@ -110,7 +118,7 @@ func NewChatwootService(
 		convCache:     cache.New(30*time.Minute, 10*time.Minute),
 		pending:       cache.New(10*time.Minute, 5*time.Minute),
 		throttle:      cache.New(time.Minute, 5*time.Minute),
-		pools:         make(map[string][]chan func()),
+		queue:         newQueue(loggerWrapper),
 	}
 }
 
@@ -325,49 +333,47 @@ func (s *chatwootService) invalidateInstance(instanceID string) {
 	}
 }
 
-// ---- Ordered work queues ----
-
 // enqueue runs fn on one of the instance workers, chosen by key, so events of
 // the same chat are processed in order without blocking the whatsmeow event
 // loop or the HTTP handler.
 func (s *chatwootService) enqueue(instanceID, key string, fn func()) {
-	s.poolsMu.Lock()
-	queues, ok := s.pools[instanceID]
-	if !ok {
-		queues = make([]chan func(), workersPerInstance)
-		for i := range queues {
-			queues[i] = make(chan func(), 1000)
-			go s.worker(instanceID, queues[i])
-		}
-		s.pools[instanceID] = queues
-	}
-	s.poolsMu.Unlock()
-
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(key))
-	q := queues[h.Sum32()%uint32(len(queues))]
-
-	select {
-	case q <- fn:
-	default:
-		s.loggerWrapper.GetLogger(instanceID).LogWarn("[%s] [chatwoot] queue full, processing out of order", instanceID)
-		go s.run(instanceID, fn)
-	}
+	s.queue.Enqueue(instanceID, key, fn)
 }
 
-func (s *chatwootService) worker(instanceID string, q chan func()) {
-	for fn := range q {
-		s.run(instanceID, fn)
-	}
+func newQueue(loggerWrapper *logger_wrapper.LoggerManager) *workqueue.Queue {
+	return workqueue.New(workersPerInstance,
+		func(instanceID string, r interface{}) {
+			loggerWrapper.GetLogger(instanceID).LogError("[%s] [chatwoot] panic: %v", instanceID, r)
+		},
+		func(instanceID string) {
+			loggerWrapper.GetLogger(instanceID).LogWarn("[%s] [chatwoot] queue full, processing out of order", instanceID)
+		})
 }
 
-func (s *chatwootService) run(instanceID string, fn func()) {
-	defer func() {
-		if r := recover(); r != nil {
-			s.loggerWrapper.GetLogger(instanceID).LogError("[%s] [chatwoot] panic: %v", instanceID, r)
+func (s *chatwootService) OnConversationResolved(fn func(instanceID string, chat types.JID)) {
+	s.onResolved = fn
+}
+
+func (s *chatwootService) HandoffToAgent(instanceID string, chat types.JID) {
+	cfg := s.activeConfig(instanceID)
+	if cfg == nil {
+		return
+	}
+	chat = chat.ToNonAD()
+	s.enqueue(instanceID, chat.String(), func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		conv, err := s.ensureConversation(ctx, cfg, instanceID, s.clientPointer[instanceID], chat, "")
+		if err != nil {
+			s.loggerWrapper.GetLogger(instanceID).LogError("[%s] [chatwoot] handoff: %v", instanceID, err)
+			return
 		}
-	}()
-	fn()
+		if err := s.api(cfg).ToggleConversationStatus(ctx, conv.ConversationID, "open"); err != nil {
+			s.loggerWrapper.GetLogger(instanceID).LogError("[%s] [chatwoot] handoff: failed to open conversation %d: %v", instanceID, conv.ConversationID, err)
+			return
+		}
+		s.loggerWrapper.GetLogger(instanceID).LogInfo("[%s] [chatwoot] conversation %d handed off to agents", instanceID, conv.ConversationID)
+	})
 }
 
 func (s *chatwootService) convLock(key string) *sync.Mutex {

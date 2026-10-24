@@ -108,13 +108,13 @@ func integrationEnv(t *testing.T) (*chatwoot_model.ChatwootConfig, *chatwootServ
 	}
 	svc := &chatwootService{
 		repo:          &memRepo{},
-		loggerWrapper: logger_wrapper.NewLoggerManager(&config.Config{LogDirectory: t.TempDir(), LogMaxSize: 1, LogMaxBackups: 1, LogMaxAge: 1}),
+		loggerWrapper: logger_wrapper.NewLoggerManager(&config.Config{LogDirectory: os.TempDir() + "/evogo-test-logs", LogMaxSize: 1, LogMaxBackups: 1, LogMaxAge: 1}),
 		importDBURI:   os.Getenv("CHATWOOT_TEST_DB"),
 		cfgCache:      cache.New(time.Minute, time.Minute),
 		convCache:     cache.New(time.Minute, time.Minute),
 		pending:       cache.New(time.Minute, time.Minute),
 		throttle:      cache.New(time.Minute, time.Minute),
-		pools:         map[string][]chan func(){},
+		queue:         newQueue(nil),
 	}
 	return cfg, svc
 }

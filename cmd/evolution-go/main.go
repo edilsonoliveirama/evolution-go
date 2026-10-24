@@ -64,6 +64,10 @@ import (
 	server_handler "github.com/evolution-foundation/evolution-go/pkg/server/handler"
 	storage_interfaces "github.com/evolution-foundation/evolution-go/pkg/storage/interfaces"
 	minio_storage "github.com/evolution-foundation/evolution-go/pkg/storage/minio"
+	typebot_handler "github.com/evolution-foundation/evolution-go/pkg/typebot/handler"
+	typebot_model "github.com/evolution-foundation/evolution-go/pkg/typebot/model"
+	typebot_repository "github.com/evolution-foundation/evolution-go/pkg/typebot/repository"
+	typebot_service "github.com/evolution-foundation/evolution-go/pkg/typebot/service"
 	user_handler "github.com/evolution-foundation/evolution-go/pkg/user/handler"
 	user_service "github.com/evolution-foundation/evolution-go/pkg/user/service"
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
@@ -209,6 +213,17 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		config.ChatwootImportDBURI,
 	)
 	whatsmeowService.AddEventListener(chatwootService)
+	typebotService := typebot_service.NewTypebotService(
+		typebot_repository.NewTypebotRepository(db),
+		instanceRepository,
+		sendMessageService,
+		clientPointer,
+		loggerWrapper,
+	)
+	whatsmeowService.AddEventListener(typebotService)
+	// Bot flow end -> Chatwoot agents; conversation resolved in Chatwoot -> bot session closed.
+	typebotService.SetHandoff(chatwootService)
+	chatwootService.OnConversationResolved(typebotService.CloseSession)
 
 	// NOVO: PollHandler usando PollService já inicializado no whatsmeowService (evita dupla inicialização)
 	pollHandler := poll_handler.NewPollHandler(whatsmeowService.GetPollService(), loggerWrapper)
@@ -253,6 +268,7 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		pollHandler,
 		server_handler.NewServerHandler(),
 		chatwoot_handler.NewChatwootHandler(chatwootService),
+		typebot_handler.NewTypebotHandler(typebotService),
 	).AssignRoutes(r)
 
 	if config.ConnectOnStartup {
@@ -276,7 +292,7 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 }
 
 func migrate(db *gorm.DB) {
-	err := db.AutoMigrate(&instance_model.Instance{}, &message_model.Message{}, &label_model.Label{}, &chatwoot_model.ChatwootConfig{}, &chatwoot_model.ChatwootMessage{})
+	err := db.AutoMigrate(&instance_model.Instance{}, &message_model.Message{}, &label_model.Label{}, &chatwoot_model.ChatwootConfig{}, &chatwoot_model.ChatwootMessage{}, &typebot_model.TypebotConfig{}, &typebot_model.TypebotSession{})
 
 	if err != nil {
 		log.Fatal(err)

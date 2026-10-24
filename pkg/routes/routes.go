@@ -21,6 +21,7 @@ import (
 	poll_handler "github.com/evolution-foundation/evolution-go/pkg/poll/handler"
 	send_handler "github.com/evolution-foundation/evolution-go/pkg/sendMessage/handler"
 	server_handler "github.com/evolution-foundation/evolution-go/pkg/server/handler"
+	typebot_handler "github.com/evolution-foundation/evolution-go/pkg/typebot/handler"
 	user_handler "github.com/evolution-foundation/evolution-go/pkg/user/handler"
 )
 
@@ -40,6 +41,7 @@ type Routes struct {
 	pollHandler             *poll_handler.PollHandler
 	serverHandler           server_handler.ServerHandler
 	chatwootHandler         chatwoot_handler.ChatwootHandler
+	typebotHandler          typebot_handler.TypebotHandler
 }
 
 func (r *Routes) AssignRoutes(eng *gin.Engine) {
@@ -261,6 +263,18 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 			routes.POST("/import-contacts", r.chatwootHandler.ImportContacts)
 		}
 	}
+
+	routes = eng.Group("/typebot")
+	{
+		routes.Use(r.authMiddleware.Auth)
+		{
+			routes.GET("/config", r.typebotHandler.GetConfig)
+			routes.PUT("/config", r.typebotHandler.SetConfig)
+			routes.DELETE("/config", r.typebotHandler.DeleteConfig)
+			routes.GET("/sessions", r.typebotHandler.ListSessions)
+			routes.DELETE("/sessions", r.typebotHandler.CloseSessions)
+		}
+	}
 }
 
 func NewRouter(
@@ -278,6 +292,7 @@ func NewRouter(
 	pollHandler *poll_handler.PollHandler,
 	serverHandler server_handler.ServerHandler,
 	chatwootHandler chatwoot_handler.ChatwootHandler,
+	typebotHandler typebot_handler.TypebotHandler,
 ) *Routes {
 	return &Routes{
 		authMiddleware:          authMiddleware,
@@ -295,5 +310,6 @@ func NewRouter(
 		pollHandler:             pollHandler,
 		serverHandler:           serverHandler,
 		chatwootHandler:         chatwootHandler,
+		typebotHandler:          typebotHandler,
 	}
 }

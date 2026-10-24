@@ -8,6 +8,8 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
+
+	"github.com/evolution-foundation/evolution-go/pkg/internal/waformat"
 )
 
 const sourceIDPrefix = "WAID:"
@@ -51,20 +53,10 @@ func brazilVariants(phone string) []string {
 	return []string{"+" + digits}
 }
 
-var (
-	reBold   = regexp.MustCompile(`\*\*([^*\n]+?)\*\*`)
-	reItalic = regexp.MustCompile(`(^|[^*\w])\*([^*\n]+?)\*([^*\w]|$)`)
-	reStrike = regexp.MustCompile(`~~([^~\n]+?)~~`)
-)
-
 // markdownToWhatsApp converts the Markdown produced by the Chatwoot editor to
-// WhatsApp formatting: **bold** -> *bold*, *italic* -> _italic_, ~~x~~ -> ~x~.
+// WhatsApp formatting.
 func markdownToWhatsApp(s string) string {
-	// Italic first, while bold is still double-starred and can't match it.
-	s = reItalic.ReplaceAllString(s, "${1}_${2}_${3}")
-	s = reBold.ReplaceAllString(s, "*${1}*")
-	s = reStrike.ReplaceAllString(s, "~${1}~")
-	return s
+	return waformat.FromMarkdown(s)
 }
 
 // signMessage prefixes the agent name the same way the Evolution API does.

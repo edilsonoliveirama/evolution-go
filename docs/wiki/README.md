@@ -39,6 +39,7 @@ Bem-vindo à documentação oficial do Evolution GO! Aqui você encontrará guia
 - [Receber eventos via Webhook](./recursos-avancados/events-system.md)
 - [Integrar com RabbitMQ/NATS](./recursos-avancados/events-system.md)
 - [Atender pelo Chatwoot](./recursos-avancados/chatwoot.md)
+- [Responder com Typebot](./recursos-avancados/typebot.md)
 - [Armazenar mídias automaticamente](./recursos-avancados/media-storage.md)
 
 ### Deploy em Produção
@@ -102,6 +103,7 @@ Funcionalidades avançadas para casos de uso complexos.
 | [**Conexão QR Code**](./recursos-avancados/qrcode-connection.md) | Fluxo de autenticação detalhado |
 | [**Multi-Device**](./recursos-avancados/multi-device.md) | Protocolo Multi-Device do WhatsApp |
 | [**Integração com Chatwoot**](./recursos-avancados/chatwoot.md) | Atendimento das instâncias pelo Chatwoot |
+| [**Integração com Typebot**](./recursos-avancados/typebot.md) | Chatbot com fluxos do Typebot, com transferência para o Chatwoot |
 
 ### 🐳 Deploy e Produção
 
