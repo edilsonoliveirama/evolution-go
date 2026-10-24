@@ -32,6 +32,7 @@ import (
 	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 	"golang.org/x/net/html"
 	"google.golang.org/protobuf/proto"
 )
@@ -2792,6 +2793,10 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 		ServerID:  response.ServerID,
 		Type:      messageType,
 	}
+
+	// whatsmeow doesn't echo our own sends; let internal listeners (Chatwoot)
+	// see messages sent through the API too.
+	s.whatsmeowService.DispatchEvent(instance, s.clientPointer[instance.Id], &events.Message{Info: messageInfo, Message: msg})
 
 	messageSent := &MessageSendStruct{
 		Info:    messageInfo,

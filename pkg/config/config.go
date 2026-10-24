@@ -61,6 +61,7 @@ type Config struct {
 	EventIgnoreStatus    bool
 	QrcodeMaxCount       int
 	CheckUserExists      bool
+	ChatwootImportDBURI  string
 
 	// Logger configurations
 	LogMaxSize    int
@@ -375,6 +376,7 @@ func Load() *Config {
 		EventIgnoreStatus:    eventIgnoreStatus == "true",
 		QrcodeMaxCount:       qrMaxCount,
 		CheckUserExists:      checkUserExists != "false", // Default true, set to false to disable
+		ChatwootImportDBURI:  os.Getenv(config_env.CHATWOOT_IMPORT_DATABASE_URI),
 		AmqpGlobalEvents:     amqpGlobalEvents,
 		AmqpSpecificEvents:   amqpSpecificEvents,
 		NatsUrl:              natsUrl,

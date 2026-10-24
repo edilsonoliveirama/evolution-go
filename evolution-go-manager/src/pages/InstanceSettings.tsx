@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import * as instancesApi from "@/services/api/instances";
 import type { Instance } from "@/types/instance";
+import ChatwootSettingsCard from "@/components/instances/ChatwootSettingsCard";
 
 const webhookSchema = z.object({
   webhookUrl: z.string().url("URL inválida").optional().or(z.literal("")),
@@ -651,6 +652,14 @@ export default function InstanceSettings() {
               </div>
             </div>
           </form>
+
+          {/* Chatwoot Integration Card */}
+          {instance.apikey && (
+            <ChatwootSettingsCard
+              instanceName={instance.instanceName}
+              instanceToken={instance.apikey}
+            />
+          )}
 
           {/* Danger Zone Card */}
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6">

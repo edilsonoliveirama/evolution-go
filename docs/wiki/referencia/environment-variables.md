@@ -65,6 +65,14 @@ POSTGRES_USERS_DB=postgresql://user:pass@host:5432/evogo_users?sslmode=disable
 
 ---
 
+## Chatwoot
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `CHATWOOT_IMPORT_DATABASE_URI` | - | URI Postgres do banco do Chatwoot. Necessária apenas para importar o histórico de mensagens (ver [Integração com Chatwoot](../recursos-avancados/chatwoot.md)) |
+
+---
+
 ## Eventos
 
 | Variável | Padrão | Descrição |

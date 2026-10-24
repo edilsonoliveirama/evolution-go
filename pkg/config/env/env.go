@@ -53,3 +53,8 @@ const (
 	LOG_DIRECTORY   = "LOG_DIRECTORY"
 	LOG_COMPRESS    = "LOG_COMPRESS"
 )
+
+const (
+	// Chatwoot integration: Chatwoot Postgres URI, only needed to import message history.
+	CHATWOOT_IMPORT_DATABASE_URI = "CHATWOOT_IMPORT_DATABASE_URI"
+)

@@ -25,6 +25,10 @@ import (
 	call_service "github.com/evolution-foundation/evolution-go/pkg/call/service"
 	chat_handler "github.com/evolution-foundation/evolution-go/pkg/chat/handler"
 	chat_service "github.com/evolution-foundation/evolution-go/pkg/chat/service"
+	chatwoot_handler "github.com/evolution-foundation/evolution-go/pkg/chatwoot/handler"
+	chatwoot_model "github.com/evolution-foundation/evolution-go/pkg/chatwoot/model"
+	chatwoot_repository "github.com/evolution-foundation/evolution-go/pkg/chatwoot/repository"
+	chatwoot_service "github.com/evolution-foundation/evolution-go/pkg/chatwoot/service"
 	community_handler "github.com/evolution-foundation/evolution-go/pkg/community/handler"
 	community_service "github.com/evolution-foundation/evolution-go/pkg/community/service"
 	config "github.com/evolution-foundation/evolution-go/pkg/config"
@@ -196,6 +200,15 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 	communityService := community_service.NewCommunityService(clientPointer, whatsmeowService, loggerWrapper)
 	labelService := label_service.NewLabelService(clientPointer, whatsmeowService, labelRepository, loggerWrapper)
 	newsletterService := newsletter_service.NewNewsletterService(clientPointer, whatsmeowService, loggerWrapper)
+	chatwootService := chatwoot_service.NewChatwootService(
+		chatwoot_repository.NewChatwootRepository(db),
+		instanceRepository,
+		sendMessageService,
+		clientPointer,
+		loggerWrapper,
+		config.ChatwootImportDBURI,
+	)
+	whatsmeowService.AddEventListener(chatwootService)
 
 	// NOVO: PollHandler usando PollService já inicializado no whatsmeowService (evita dupla inicialização)
 	pollHandler := poll_handler.NewPollHandler(whatsmeowService.GetPollService(), loggerWrapper)
@@ -239,6 +252,7 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		newsletter_handler.NewNewsletterHandler(newsletterService),
 		pollHandler,
 		server_handler.NewServerHandler(),
+		chatwoot_handler.NewChatwootHandler(chatwootService),
 	).AssignRoutes(r)
 
 	if config.ConnectOnStartup {
@@ -262,7 +276,7 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 }
 
 func migrate(db *gorm.DB) {
-	err := db.AutoMigrate(&instance_model.Instance{}, &message_model.Message{}, &label_model.Label{})
+	err := db.AutoMigrate(&instance_model.Instance{}, &message_model.Message{}, &label_model.Label{}, &chatwoot_model.ChatwootConfig{}, &chatwoot_model.ChatwootMessage{})
 
 	if err != nil {
 		log.Fatal(err)

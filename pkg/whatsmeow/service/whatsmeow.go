@@ -69,6 +69,19 @@ type WhatsmeowService interface {
 	PasskeyCeremonyStore() *ceremony.Store
 	SubmitPasskeyResponse(instanceId string, resp *types.WebAuthnResponse) error
 	ConfirmPasskey(instanceId string) error
+
+	// Internal event listeners (e.g. the Chatwoot integration). DispatchEvent is
+	// also called by the send service with a synthetic *events.Message for
+	// messages sent through the API.
+	AddEventListener(listener EventListener)
+	DispatchEvent(instance *instance_model.Instance, client *whatsmeow.Client, evt interface{})
+}
+
+// EventListener receives the typed whatsmeow events of every instance, after
+// the instance filters and JID normalization were applied. Implementations
+// must not block: hand the work off to their own goroutines.
+type EventListener interface {
+	HandleWhatsappEvent(instance *instance_model.Instance, client *whatsmeow.Client, evt interface{})
 }
 
 type clientVersion struct {
@@ -98,6 +111,13 @@ type whatsmeowService struct {
 	natsProducer       producer_interfaces.Producer
 	loggerWrapper      *logger_wrapper.LoggerManager
 	passkeyCeremony    *ceremony.Store
+	// Shared by pointer: several methods use value receivers and copy the struct.
+	listeners *eventListeners
+}
+
+type eventListeners struct {
+	mu   sync.RWMutex
+	list []EventListener
 }
 
 type MyClient struct {
@@ -2072,6 +2092,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		return
 	}
 
+	// Internal listeners get the typed event (already filtered/normalized above).
+	mycli.service.DispatchEvent(mycli.Instance, mycli.WAClient, rawEvt)
+
 	if doWebhook {
 		postMap["instanceToken"] = mycli.token
 		postMap["instanceId"] = mycli.userID
@@ -2833,6 +2856,7 @@ func NewWhatsmeowService(
 		natsProducer:       natsProducer,
 		loggerWrapper:      loggerWrapper,
 		passkeyCeremony:    ceremony.NewStore(),
+		listeners:          &eventListeners{},
 	}
 }
 
@@ -2843,6 +2867,29 @@ func (w *whatsmeowService) GetPollService() poll_service.PollService {
 
 // PasskeyCeremonyStore exposes the shared ceremony store so the public HTTP
 // polling endpoint can read the current stage for a given ceremony token.
+func (w *whatsmeowService) AddEventListener(listener EventListener) {
+	w.listeners.mu.Lock()
+	defer w.listeners.mu.Unlock()
+	w.listeners.list = append(w.listeners.list, listener)
+}
+
+func (w *whatsmeowService) DispatchEvent(instance *instance_model.Instance, client *whatsmeow.Client, evt interface{}) {
+	w.listeners.mu.RLock()
+	listeners := w.listeners.list
+	w.listeners.mu.RUnlock()
+
+	for _, l := range listeners {
+		func() {
+			defer func() {
+				if r := recover(); r != nil && instance != nil {
+					w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] event listener panic: %v", instance.Id, r)
+				}
+			}()
+			l.HandleWhatsappEvent(instance, client, evt)
+		}()
+	}
+}
+
 func (w *whatsmeowService) PasskeyCeremonyStore() *ceremony.Store {
 	return w.passkeyCeremony
 }
