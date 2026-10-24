@@ -3,7 +3,7 @@
  * Displays QR code for WhatsApp connection
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -31,21 +31,28 @@ export default function QRCodeModal({
 }: QRCodeModalProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Keep the latest onRefresh in a ref so parent re-renders (the instances
+  // page polls every 5s) don't reset the interval before it ever fires.
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  const instanceId = instance?.id;
+  const isConnected = instance?.connected;
+
   // Auto-refresh every 10 seconds to check connection status and update QR code
   useEffect(() => {
-    if (!open || !instance || instance.connected) return;
+    if (!open || !instanceId || isConnected) return;
 
     const interval = setInterval(() => {
-      if (onRefresh) {
-        console.log('Auto-refreshing QR Code and checking connection...');
-        onRefresh().catch((err) => {
-          console.error('Auto-refresh failed:', err);
-        });
-      }
-    }, 10000); // 10 seconds (faster polling to detect connection)
+      onRefreshRef.current?.().catch((err) => {
+        console.error('Auto-refresh failed:', err);
+      });
+    }, 10000); // 10 seconds (QR rotates every ~20s)
 
     return () => clearInterval(interval);
-  }, [open, instance, onRefresh]);
+  }, [open, instanceId, isConnected]);
 
   const handleRefresh = async () => {
     if (!onRefresh) return;

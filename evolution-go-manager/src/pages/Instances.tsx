@@ -367,10 +367,10 @@ export default function Instances() {
       // Fetch fresh instance data to check connection status
       await fetchInstances();
 
-      // Find updated instance
-      const updatedInstance = instances.find(
-        (i) => i.id === qrcodeModal.instance?.id
-      );
+      // Find updated instance (read from the store, the closure value is stale)
+      const updatedInstance = useInstancesStore
+        .getState()
+        .instances.find((i) => i.id === qrcodeModal.instance?.id);
 
       if (!updatedInstance) return;
 
@@ -411,7 +411,7 @@ export default function Instances() {
       console.error('Erro ao atualizar QR Code:', error);
       throw error;
     }
-  }, [qrcodeModal.instance, fetchInstances, instances]);
+  }, [qrcodeModal.instance, fetchInstances]);
 
   const handleConfirmDelete = async () => {
     if (!deleteModal.instance) return;
