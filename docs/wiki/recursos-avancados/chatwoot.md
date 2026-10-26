@@ -53,6 +53,8 @@ Se o envio para o WhatsApp falhar (instância desconectada, número inválido et
 
 O WhatsApp só envia o histórico **no momento do pareamento**. Habilite a opção e depois conecte (ou reconecte com novo QR Code) a instância.
 
+Em **Dias de histórico**, `0` importa tudo o que o WhatsApp enviar. Por padrão o celular manda cerca de 1 ano; para pedir mais, defina no servidor `HISTORY_SYNC_DAYS_LIMIT` (ex.: `3650` para 10 anos) antes de parear. O celular precisa ficar online durante a sincronização, que pode levar de minutos a horas, e conversas de grupo não são importadas.
+
 A importação grava direto no banco do Chatwoot, preservando a data original das mensagens e sem disparar notificações. Para habilitar, defina no servidor do Evolution GO:
 
 ```env

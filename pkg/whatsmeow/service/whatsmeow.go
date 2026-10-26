@@ -395,6 +395,10 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	store.DeviceProps.Os = &cd.Instance.OsName
 	store.DeviceProps.RequireFullSync = proto.Bool(true)
+	// Ask the phone for more history at pairing (default: phone decides, ~1 year).
+	if w.config.HistorySyncDaysLimit > 0 && store.DeviceProps.HistorySyncConfig != nil {
+		store.DeviceProps.HistorySyncConfig.FullSyncDaysLimit = proto.Uint32(uint32(w.config.HistorySyncDaysLimit))
+	}
 
 	if w.config.WhatsappVersionMajor != 0 && w.config.WhatsappVersionMinor != 0 && w.config.WhatsappVersionPatch != 0 {
 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Setting whatsapp version to %d.%d.%d", cd.Instance.Id, w.config.WhatsappVersionMajor, w.config.WhatsappVersionMinor, w.config.WhatsappVersionPatch)

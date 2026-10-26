@@ -62,6 +62,7 @@ type Config struct {
 	QrcodeMaxCount       int
 	CheckUserExists      bool
 	ChatwootImportDBURI  string
+	HistorySyncDaysLimit int
 
 	// Logger configurations
 	LogMaxSize    int
@@ -343,6 +344,8 @@ func Load() *Config {
 		logCompress = true // Default compression enabled
 	}
 
+	historySyncDaysLimit, _ := strconv.Atoi(os.Getenv(config_env.HISTORY_SYNC_DAYS_LIMIT))
+
 	config := &Config{
 		PostgresAuthDB:       postgresAuthDB,
 		postgresUsersDB:      postgresUsersDB,
@@ -377,6 +380,7 @@ func Load() *Config {
 		QrcodeMaxCount:       qrMaxCount,
 		CheckUserExists:      checkUserExists != "false", // Default true, set to false to disable
 		ChatwootImportDBURI:  os.Getenv(config_env.CHATWOOT_IMPORT_DATABASE_URI),
+		HistorySyncDaysLimit: historySyncDaysLimit,
 		AmqpGlobalEvents:     amqpGlobalEvents,
 		AmqpSpecificEvents:   amqpSpecificEvents,
 		NatsUrl:              natsUrl,

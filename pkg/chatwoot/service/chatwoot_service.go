@@ -156,8 +156,8 @@ func (s *chatwootService) SaveConfig(ctx context.Context, instanceID string, in 
 	in.WebhookBaseURL = strings.TrimRight(strings.TrimSpace(in.WebhookBaseURL), "/")
 	in.InboxName = strings.TrimSpace(in.InboxName)
 	in.Token = strings.TrimSpace(in.Token)
-	if in.DaysLimitImport <= 0 {
-		in.DaysLimitImport = 3
+	if in.DaysLimitImport < 0 {
+		in.DaysLimitImport = 0 // 0 = all history
 	}
 
 	// An existing connection might point to a different inbox; reset it when

@@ -58,11 +58,11 @@ func (s *chatwootService) importHistory(cfg *chatwoot_model.ChatwootConfig, inst
 		return
 	}
 
-	days := cfg.DaysLimitImport
-	if days <= 0 {
-		days = 3
+	// DaysLimitImport 0 imports everything WhatsApp sent in the history sync.
+	var cutoff time.Time
+	if cfg.DaysLimitImport > 0 {
+		cutoff = time.Now().AddDate(0, 0, -cfg.DaysLimitImport)
 	}
-	cutoff := time.Now().AddDate(0, 0, -days)
 	ignore := parseIgnoreList(cfg.IgnoreJids)
 
 	var chats []historyChat

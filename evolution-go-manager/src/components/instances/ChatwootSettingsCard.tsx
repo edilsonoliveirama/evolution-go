@@ -38,7 +38,7 @@ function toInput(config: ChatwootConfig, instanceName: string): ChatwootConfigIn
     ignoreJids: config.ignoreJids || '',
     importContacts: config.importContacts,
     importMessages: config.importMessages,
-    daysLimitImport: config.daysLimitImport || 3,
+    daysLimitImport: config.daysLimitImport ?? 3,
   };
 }
 
@@ -110,7 +110,7 @@ export default function ChatwootSettingsCard({ instanceName, instanceToken }: Ch
       const saved = await chatwootApi.saveChatwootConfig(instanceToken, {
         ...form,
         accountId: Number(form.accountId) || 0,
-        daysLimitImport: Number(form.daysLimitImport) || 3,
+        daysLimitImport: Math.max(0, Number(form.daysLimitImport) || 0),
       });
       setConfig(saved);
       setForm(toInput(saved, instanceName));
@@ -428,13 +428,15 @@ export default function ChatwootSettingsCard({ instanceName, instanceToken }: Ch
                 <input
                   id="cw-days"
                   type="number"
-                  min={1}
-                  max={365}
+                  min={0}
                   value={form.daysLimitImport}
                   disabled={fieldsDisabled}
                   onChange={(e) => update('daysLimitImport', Number(e.target.value))}
                   className={`${inputClass} max-w-[8rem]`}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  0 = todo o histórico que o WhatsApp enviar no pareamento
+                </p>
               </div>
             )}
           </div>

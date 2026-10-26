@@ -57,4 +57,6 @@ const (
 const (
 	// Chatwoot integration: Chatwoot Postgres URI, only needed to import message history.
 	CHATWOOT_IMPORT_DATABASE_URI = "CHATWOOT_IMPORT_DATABASE_URI"
+	// Days of history requested from the phone when pairing (0 = phone default, ~1 year).
+	HISTORY_SYNC_DAYS_LIMIT = "HISTORY_SYNC_DAYS_LIMIT"
 )

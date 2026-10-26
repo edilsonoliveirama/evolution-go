@@ -189,6 +189,7 @@ func (s *chatwootService) handleMessage(cfg *chatwoot_model.ChatwootConfig, inst
 	}); err != nil {
 		log.LogError("[%s] [chatwoot] failed to save message mapping: %v", instanceID, err)
 	}
+	log.LogInfo("[%s] [chatwoot] %s message %s mirrored to conversation %d", instanceID, out.MessageType, waID, conv.ConversationID)
 }
 
 // postMessage creates the message in the chat's conversation, recreating the

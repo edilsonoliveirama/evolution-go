@@ -187,6 +187,7 @@ func (s *chatwootService) sendToWhatsapp(cfg *chatwoot_model.ChatwootConfig, ins
 			SenderJid:         client.Store.ID.ToNonAD().String(),
 			FromMe:            true,
 		})
+		log.LogInfo("[%s] [chatwoot] Chatwoot message %d sent to WhatsApp as %s", instanceID, hook.ID, waID)
 	}
 
 	if len(hook.Attachments) == 0 {

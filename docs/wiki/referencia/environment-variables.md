@@ -69,6 +69,7 @@ POSTGRES_USERS_DB=postgresql://user:pass@host:5432/evogo_users?sslmode=disable
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
+| `HISTORY_SYNC_DAYS_LIMIT` | - | Dias de histórico pedidos ao celular no pareamento. Sem valor, o celular decide (cerca de 1 ano) |
 | `CHATWOOT_IMPORT_DATABASE_URI` | - | URI Postgres do banco do Chatwoot. Necessária apenas para importar o histórico de mensagens (ver [Integração com Chatwoot](../recursos-avancados/chatwoot.md)) |
 
 ---
