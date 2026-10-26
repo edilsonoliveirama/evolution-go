@@ -46,7 +46,17 @@ func (s *chatwootService) HandleWhatsappEvent(instance *instance_model.Instance,
 			s.handleReadReceipt(cfg, instance.Id, client, evt)
 		})
 	case *events.HistorySync:
-		if s.ImportAvailable() && (cfg.ImportMessages || cfg.ImportContacts) {
+		log := s.loggerWrapper.GetLogger(instance.Id)
+		syncType := evt.Data.GetSyncType().String()
+		switch {
+		case len(evt.Data.GetConversations()) == 0:
+			// push names, status, etc.: nothing to import
+		case !s.ImportAvailable():
+			log.LogInfo("[%s] [chatwoot] history import skipped (%s): CHATWOOT_IMPORT_DATABASE_URI not set", instance.Id, syncType)
+		case !cfg.ImportMessages && !cfg.ImportContacts:
+			log.LogInfo("[%s] [chatwoot] history import skipped (%s): import is disabled in the Chatwoot settings", instance.Id, syncType)
+		default:
+			log.LogInfo("[%s] [chatwoot] history import queued (%s): %d conversations", instance.Id, syncType, len(evt.Data.GetConversations()))
 			s.enqueue(instance.Id, "history", func() {
 				s.importHistory(cfg, instance.Id, client, evt)
 			})

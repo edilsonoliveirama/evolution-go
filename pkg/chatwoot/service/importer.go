@@ -66,9 +66,11 @@ func (s *chatwootService) importHistory(cfg *chatwoot_model.ChatwootConfig, inst
 	ignore := parseIgnoreList(cfg.IgnoreJids)
 
 	var chats []historyChat
+	skipped := 0 // groups, newsletters, ignored numbers, unparsable ids
 	for _, conv := range evt.Data.GetConversations() {
 		rawJID, err := types.ParseJID(conv.GetID())
 		if err != nil {
+			skipped++
 			continue
 		}
 		chatJID := rawJID.ToNonAD()
@@ -80,6 +82,7 @@ func (s *chatwootService) importHistory(cfg *chatwoot_model.ChatwootConfig, inst
 			}
 		}
 		if !isSupportedChat(chatJID) || isIgnored(ignore, chatJID) {
+			skipped++
 			continue
 		}
 
@@ -128,30 +131,39 @@ func (s *chatwootService) importHistory(cfg *chatwoot_model.ChatwootConfig, inst
 		chats = append(chats, chat)
 	}
 
+	syncType := evt.Data.GetSyncType().String()
 	if len(chats) == 0 {
+		log.LogInfo("[%s] [chatwoot] history import (%s): nothing to import (%d conversations skipped: groups/ignored)", instanceID, syncType, skipped)
 		return
 	}
+	log.LogInfo("[%s] [chatwoot] history import (%s): importing %d chats (%d skipped: groups/ignored)", instanceID, syncType, len(chats), skipped)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	userType, userID, err := tokenOwner(ctx, db, cfg.Token)
+	ownerCtx, cancelOwner := context.WithTimeout(context.Background(), 30*time.Second)
+	userType, userID, err := tokenOwner(ownerCtx, db, cfg.Token)
+	cancelOwner()
 	if err != nil {
 		log.LogError("[%s] [chatwoot] import: could not resolve the token owner: %v", instanceID, err)
 		return
 	}
 
-	imported := 0
-	for _, chat := range chats {
+	imported, failed := 0, 0
+	for i, chat := range chats {
+		// Per-chat timeout: a large FULL sync must not be cut by a batch-wide limit.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		n, err := s.importChat(ctx, db, cfg, instanceID, chat, userType, userID)
+		cancel()
 		if err != nil {
+			failed++
 			log.LogError("[%s] [chatwoot] import of chat %s failed: %v", instanceID, chat.JID.User, err)
 			continue
 		}
 		imported += n
 		s.convCache.Delete(instanceID + "|" + chat.JID.String())
+		if (i+1)%50 == 0 {
+			log.LogInfo("[%s] [chatwoot] history import (%s): %d/%d chats, %d messages so far", instanceID, syncType, i+1, len(chats), imported)
+		}
 	}
-	log.LogInfo("[%s] [chatwoot] history import: %d chats, %d messages", instanceID, len(chats), imported)
+	log.LogInfo("[%s] [chatwoot] history import (%s) finished: %d chats, %d messages, %d failed", instanceID, syncType, len(chats), imported, failed)
 }
 
 func tokenOwner(ctx context.Context, db *sql.DB, token string) (string, int, error) {
