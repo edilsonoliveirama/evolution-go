@@ -518,7 +518,8 @@ func (s *chatwootService) ImportContacts(instanceID string) error {
 			continue
 		}
 
-		reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		// Long enough to wait out a full Chatwoot rate-limit window (Retry-After ~60s).
+		reqCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		existing, err := s.findContact(reqCtx, cfg, jid)
 		if err == nil && existing == nil {
 			if _, _, err = s.api(cfg).CreateContact(reqCtx, cfg.InboxID, name, phoneFromJID(jid), jid.String(), ""); err == nil {
