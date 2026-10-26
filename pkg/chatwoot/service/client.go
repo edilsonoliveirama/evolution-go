@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -119,19 +120,43 @@ func (c *apiClient) doJSON(ctx context.Context, method, fullURL string, body int
 	return c.send(req, out)
 }
 
+// maxRateLimitRetries bounds the retries after Chatwoot answers 429 (Rack::Attack).
+const maxRateLimitRetries = 6
+
 func (c *apiClient) send(req *http.Request, out interface{}) error {
 	req.Header.Set("api_access_token", c.token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	var resp *http.Response
+	var respBody []byte
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return err
+			}
+			req.Body = body
+		}
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
+		var err error
+		resp, err = c.http.Do(req)
+		if err != nil {
+			return err
+		}
+		respBody, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode != http.StatusTooManyRequests || attempt >= maxRateLimitRetries {
+			break
+		}
+		select {
+		case <-time.After(retryDelay(resp.Header.Get("Retry-After"), attempt)):
+		case <-req.Context().Done():
+			return req.Context().Err()
+		}
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
@@ -359,6 +384,22 @@ func (c *apiClient) Download(ctx context.Context, fileURL string) ([]byte, strin
 		return nil, "", err
 	}
 	return data, resp.Header.Get("Content-Type"), nil
+}
+
+// retryDelay honours Retry-After (seconds) and otherwise backs off exponentially
+// (1s, 2s, 4s, ... up to 60s).
+func retryDelay(retryAfter string, attempt int) time.Duration {
+	if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && secs > 0 {
+		if secs > 60 {
+			secs = 60
+		}
+		return time.Duration(secs) * time.Second
+	}
+	d := time.Second << attempt
+	if d > 60*time.Second {
+		d = 60 * time.Second
+	}
+	return d
 }
 
 func escapeQuotes(s string) string {

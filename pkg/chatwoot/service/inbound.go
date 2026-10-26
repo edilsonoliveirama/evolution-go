@@ -529,7 +529,8 @@ func (s *chatwootService) ImportContacts(instanceID string) error {
 		if err != nil {
 			log.LogWarn("[%s] [chatwoot] failed to import contact %s: %v", instanceID, jid.User, err)
 		}
-		time.Sleep(100 * time.Millisecond) // be gentle with the Chatwoot API
+		// ~2 requests per contact; stay well below Chatwoot's rate limit (429s are retried by the client).
+		time.Sleep(300 * time.Millisecond)
 	}
 	log.LogInfo("[%s] [chatwoot] contact import finished: %d created", instanceID, created)
 	return nil
