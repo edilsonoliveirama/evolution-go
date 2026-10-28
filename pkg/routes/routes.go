@@ -17,6 +17,7 @@ import (
 	label_handler "github.com/evolution-foundation/evolution-go/pkg/label/handler"
 	message_handler "github.com/evolution-foundation/evolution-go/pkg/message/handler"
 	auth_middleware "github.com/evolution-foundation/evolution-go/pkg/middleware"
+	monitoring_handler "github.com/evolution-foundation/evolution-go/pkg/monitoring/handler"
 	newsletter_handler "github.com/evolution-foundation/evolution-go/pkg/newsletter/handler"
 	poll_handler "github.com/evolution-foundation/evolution-go/pkg/poll/handler"
 	send_handler "github.com/evolution-foundation/evolution-go/pkg/sendMessage/handler"
@@ -42,6 +43,7 @@ type Routes struct {
 	serverHandler           server_handler.ServerHandler
 	chatwootHandler         chatwoot_handler.ChatwootHandler
 	typebotHandler          typebot_handler.TypebotHandler
+	monitoringHandler       monitoring_handler.MonitoringHandler
 }
 
 func (r *Routes) AssignRoutes(eng *gin.Engine) {
@@ -275,6 +277,21 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 			routes.DELETE("/sessions", r.typebotHandler.CloseSessions)
 		}
 	}
+
+	// Prometheus scrape: global API key in the apikey header or as a Bearer token.
+	eng.GET("/metrics", r.monitoringHandler.Prometheus)
+
+	routes = eng.Group("/monitoring")
+	{
+		routes.Use(r.authMiddleware.AuthAdmin)
+		{
+			routes.GET("/dashboard", r.monitoringHandler.Dashboard)
+			routes.GET("/events", r.monitoringHandler.Events)
+			routes.GET("/alerts", r.monitoringHandler.GetAlerts)
+			routes.PUT("/alerts", r.monitoringHandler.SetAlerts)
+			routes.POST("/alerts/test", r.monitoringHandler.TestAlert)
+		}
+	}
 }
 
 func NewRouter(
@@ -293,6 +310,7 @@ func NewRouter(
 	serverHandler server_handler.ServerHandler,
 	chatwootHandler chatwoot_handler.ChatwootHandler,
 	typebotHandler typebot_handler.TypebotHandler,
+	monitoringHandler monitoring_handler.MonitoringHandler,
 ) *Routes {
 	return &Routes{
 		authMiddleware:          authMiddleware,
@@ -311,5 +329,6 @@ func NewRouter(
 		serverHandler:           serverHandler,
 		chatwootHandler:         chatwootHandler,
 		typebotHandler:          typebotHandler,
+		monitoringHandler:       monitoringHandler,
 	}
 }

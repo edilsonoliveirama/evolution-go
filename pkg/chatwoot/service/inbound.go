@@ -16,6 +16,7 @@ import (
 
 	chatwoot_model "github.com/evolution-foundation/evolution-go/pkg/chatwoot/model"
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
+	"github.com/evolution-foundation/evolution-go/pkg/metrics"
 )
 
 // HandleWhatsappEvent receives every whatsmeow event of every instance (and
@@ -181,6 +182,7 @@ func (s *chatwootService) handleMessage(cfg *chatwoot_model.ChatwootConfig, inst
 	created, conv, err := s.postMessage(cfg, instanceID, client, chat, pushName, out)
 	if err != nil {
 		log.LogError("[%s] [chatwoot] failed to mirror message %s: %v", instanceID, waID, err)
+		metrics.RecordDeliveryFailure(instanceID, metrics.FailureChatwoot)
 		return
 	}
 

@@ -5,6 +5,7 @@ import Layout from '@/components/base/Layout';
 import Home from '@/pages/Home';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
+import Metrics from '@/pages/Metrics';
 import Instances from '@/pages/Instances';
 import InstanceSettings from '@/pages/InstanceSettings';
 import Messages from '@/pages/Messages';
@@ -43,6 +44,7 @@ function App() {
               <Route path="/manager" element={<Layout />}>
               <Route index element={<Dashboard />} />
               <Route path="instances" element={<Instances />} />
+              <Route path="metrics" element={<Metrics />} />
               <Route path="instances/:instanceId/settings" element={<InstanceSettings />} />
               <Route path="messages" element={<Messages />} />
               <Route path="events" element={<Events />} />

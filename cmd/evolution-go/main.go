@@ -53,7 +53,12 @@ import (
 	message_model "github.com/evolution-foundation/evolution-go/pkg/message/model"
 	message_repository "github.com/evolution-foundation/evolution-go/pkg/message/repository"
 	message_service "github.com/evolution-foundation/evolution-go/pkg/message/service"
+	"github.com/evolution-foundation/evolution-go/pkg/metrics"
 	auth_middleware "github.com/evolution-foundation/evolution-go/pkg/middleware"
+	monitoring_handler "github.com/evolution-foundation/evolution-go/pkg/monitoring/handler"
+	monitoring_model "github.com/evolution-foundation/evolution-go/pkg/monitoring/model"
+	monitoring_repository "github.com/evolution-foundation/evolution-go/pkg/monitoring/repository"
+	monitoring_service "github.com/evolution-foundation/evolution-go/pkg/monitoring/service"
 	newsletter_handler "github.com/evolution-foundation/evolution-go/pkg/newsletter/handler"
 	newsletter_service "github.com/evolution-foundation/evolution-go/pkg/newsletter/service"
 	passkey_handler "github.com/evolution-foundation/evolution-go/pkg/passkey/handler"
@@ -225,6 +230,20 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 	typebotService.SetHandoff(chatwootService)
 	chatwootService.OnConversationResolved(typebotService.CloseSession)
 
+	monitoringService := monitoring_service.NewMonitoringService(
+		monitoring_repository.NewMonitoringRepository(db),
+		instanceRepository,
+		sendMessageService,
+		clientPointer,
+		config.ClientName,
+		config.MetricsTimezone,
+		config.MetricsRetentionDays,
+	)
+	whatsmeowService.AddEventListener(monitoringService)
+	metrics.OnDeliveryFailure(monitoringService.RecordFailure)
+	// Before ConnectOnStartup below: the instances still offline after the restart are tracked.
+	monitoringService.Start()
+
 	// NOVO: PollHandler usando PollService já inicializado no whatsmeowService (evita dupla inicialização)
 	pollHandler := poll_handler.NewPollHandler(whatsmeowService.GetPollService(), loggerWrapper)
 
@@ -269,6 +288,7 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		server_handler.NewServerHandler(),
 		chatwoot_handler.NewChatwootHandler(chatwootService),
 		typebot_handler.NewTypebotHandler(typebotService),
+		monitoring_handler.NewMonitoringHandler(monitoringService, config.GlobalApiKey),
 	).AssignRoutes(r)
 
 	if config.ConnectOnStartup {
@@ -292,7 +312,8 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 }
 
 func migrate(db *gorm.DB) {
-	err := db.AutoMigrate(&instance_model.Instance{}, &message_model.Message{}, &label_model.Label{}, &chatwoot_model.ChatwootConfig{}, &chatwoot_model.ChatwootMessage{}, &typebot_model.TypebotConfig{}, &typebot_model.TypebotSession{})
+	err := db.AutoMigrate(&instance_model.Instance{}, &message_model.Message{}, &label_model.Label{}, &chatwoot_model.ChatwootConfig{}, &chatwoot_model.ChatwootMessage{}, &typebot_model.TypebotConfig{}, &typebot_model.TypebotSession{},
+		&monitoring_model.MetricEvent{}, &monitoring_model.MetricDaily{}, &monitoring_model.MetricContact{}, &monitoring_model.AlertConfig{})
 
 	if err != nil {
 		log.Fatal(err)

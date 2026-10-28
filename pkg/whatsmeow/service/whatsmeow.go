@@ -2305,6 +2305,7 @@ func (w *whatsmeowService) sendToQueueOrWebhook(instance *instance_model.Instanc
 		err := w.rabbitmqProducer.Produce(queueName, jsonData, instance.RabbitmqEnable, instance.Id)
 		if err != nil {
 			w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Failed to send message to rabbitmq: %s", instance.Id, err)
+			metrics.RecordDeliveryFailure(instance.Id, metrics.FailureRabbitMQ)
 			return
 		}
 		w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to rabbitmq successfully", instance.Id)
@@ -2314,6 +2315,7 @@ func (w *whatsmeowService) sendToQueueOrWebhook(instance *instance_model.Instanc
 		err := w.natsProducer.Produce(queueName, jsonData, instance.NatsEnable, instance.Id)
 		if err != nil {
 			w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Failed to send message to nats: %s", instance.Id, err)
+			metrics.RecordDeliveryFailure(instance.Id, metrics.FailureNats)
 			return
 		}
 		w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to nats successfully", instance.Id)
@@ -2332,6 +2334,7 @@ func (w *whatsmeowService) sendToQueueOrWebhook(instance *instance_model.Instanc
 		err := w.webhookProducer.Produce(queueName, jsonData, instance.Webhook, instance.Id)
 		if err != nil {
 			w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Failed to send message to webhook: %s", instance.Id, err)
+			metrics.RecordDeliveryFailure(instance.Id, metrics.FailureWebhook)
 			return
 		}
 		w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to webhook successfully", instance.Id)

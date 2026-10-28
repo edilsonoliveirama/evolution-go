@@ -63,6 +63,8 @@ type Config struct {
 	CheckUserExists      bool
 	ChatwootImportDBURI  string
 	HistorySyncDaysLimit int
+	MetricsTimezone      string
+	MetricsRetentionDays int
 
 	// Logger configurations
 	LogMaxSize    int
@@ -346,6 +348,15 @@ func Load() *Config {
 
 	historySyncDaysLimit, _ := strconv.Atoi(os.Getenv(config_env.HISTORY_SYNC_DAYS_LIMIT))
 
+	metricsTimezone := os.Getenv(config_env.METRICS_TIMEZONE)
+	if metricsTimezone == "" {
+		metricsTimezone = "America/Sao_Paulo"
+	}
+	metricsRetentionDays, _ := strconv.Atoi(os.Getenv(config_env.METRICS_RETENTION_DAYS))
+	if metricsRetentionDays <= 0 {
+		metricsRetentionDays = 90
+	}
+
 	config := &Config{
 		PostgresAuthDB:       postgresAuthDB,
 		postgresUsersDB:      postgresUsersDB,
@@ -381,6 +392,8 @@ func Load() *Config {
 		CheckUserExists:      checkUserExists != "false", // Default true, set to false to disable
 		ChatwootImportDBURI:  os.Getenv(config_env.CHATWOOT_IMPORT_DATABASE_URI),
 		HistorySyncDaysLimit: historySyncDaysLimit,
+		MetricsTimezone:      metricsTimezone,
+		MetricsRetentionDays: metricsRetentionDays,
 		AmqpGlobalEvents:     amqpGlobalEvents,
 		AmqpSpecificEvents:   amqpSpecificEvents,
 		NatsUrl:              natsUrl,

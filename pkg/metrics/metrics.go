@@ -34,3 +34,29 @@ func MessagesReceived() int64 {
 func Uptime() time.Duration {
 	return time.Since(startTime)
 }
+
+// Components reported to RecordDeliveryFailure.
+const (
+	FailureWebhook  = "webhook"
+	FailureRabbitMQ = "rabbitmq"
+	FailureNats     = "nats"
+	FailureChatwoot = "chatwoot"
+	FailureTypebot  = "typebot"
+	FailureSend     = "send"
+)
+
+var failureHook atomic.Value // func(instanceID, component string)
+
+// OnDeliveryFailure registers the receiver of RecordDeliveryFailure calls
+// (the monitoring service, which stores them and raises alerts).
+func OnDeliveryFailure(fn func(instanceID, component string)) {
+	failureHook.Store(fn)
+}
+
+// RecordDeliveryFailure reports a message or event that could not be
+// delivered (webhook, queue, integration or WhatsApp send).
+func RecordDeliveryFailure(instanceID, component string) {
+	if fn, ok := failureHook.Load().(func(string, string)); ok && fn != nil {
+		fn(instanceID, component)
+	}
+}

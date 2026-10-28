@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
+  BarChart3,
   LayoutDashboard,
   Smartphone,
 } from 'lucide-react';
@@ -8,6 +9,7 @@ import { cn } from '@/utils/cn';
 const navItems = [
   { to: '/manager', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/manager/instances', label: 'Instâncias', icon: Smartphone },
+  { to: '/manager/metrics', label: 'Métricas', icon: BarChart3 },
 ];
 
 function Sidebar() {

@@ -2775,6 +2775,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 	response, err := s.clientPointer[instance.Id].SendMessage(context.Background(), recipient, msg, sendExtra)
 	if err != nil {
 		s.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error sending message: %v", instance.Id, err)
+		metrics.RecordDeliveryFailure(instance.Id, metrics.FailureSend)
 		return nil, err
 	}
 

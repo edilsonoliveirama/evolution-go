@@ -11,6 +11,7 @@ import (
 
 	producer_interfaces "github.com/evolution-foundation/evolution-go/pkg/events/interfaces"
 	logger_wrapper "github.com/evolution-foundation/evolution-go/pkg/logger"
+	"github.com/evolution-foundation/evolution-go/pkg/metrics"
 )
 
 type webhookProducer struct {
@@ -62,6 +63,7 @@ func (p *webhookProducer) sendWebhookWithRetry(url string, body []byte, maxRetri
 		time.Sleep(retryInterval)
 	}
 	p.loggerWrapper.GetLogger(userID).LogError("[%s] webhook failed after maximum retries - url: %s", userID, url)
+	metrics.RecordDeliveryFailure(userID, metrics.FailureWebhook)
 }
 
 func (p *webhookProducer) sendWebhook(url string, body []byte, userID string) (error, []byte, int) {

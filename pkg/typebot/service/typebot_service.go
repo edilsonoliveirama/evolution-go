@@ -18,6 +18,7 @@ import (
 	instance_repository "github.com/evolution-foundation/evolution-go/pkg/instance/repository"
 	"github.com/evolution-foundation/evolution-go/pkg/internal/workqueue"
 	logger_wrapper "github.com/evolution-foundation/evolution-go/pkg/logger"
+	"github.com/evolution-foundation/evolution-go/pkg/metrics"
 	send_service "github.com/evolution-foundation/evolution-go/pkg/sendMessage/service"
 	typebot_model "github.com/evolution-foundation/evolution-go/pkg/typebot/model"
 	typebot_repository "github.com/evolution-foundation/evolution-go/pkg/typebot/repository"
@@ -349,6 +350,7 @@ func (s *typebotService) handleContactMessage(cfg *typebot_model.TypebotConfig, 
 		}
 		if !errors.Is(err, ErrSessionNotFound) {
 			log.LogError("[%s] [typebot] continueChat failed for %s: %v", instanceID, chat.User, err)
+			metrics.RecordDeliveryFailure(instanceID, metrics.FailureTypebot)
 			return
 		}
 		// The session ended on the Typebot side; this message may start a new one.
@@ -362,6 +364,7 @@ func (s *typebotService) handleContactMessage(cfg *typebot_model.TypebotConfig, 
 	resp, err := viewer.StartChat(ctx, cfg.PublicID, s.prefilledVariables(instanceID, chat, evt))
 	if err != nil {
 		log.LogError("[%s] [typebot] startChat failed for %s: %v", instanceID, chat.User, err)
+		metrics.RecordDeliveryFailure(instanceID, metrics.FailureTypebot)
 		return
 	}
 	log.LogInfo("[%s] [typebot] session started for %s", instanceID, chat.User)

@@ -59,4 +59,7 @@ const (
 	CHATWOOT_IMPORT_DATABASE_URI = "CHATWOOT_IMPORT_DATABASE_URI"
 	// Days of history requested from the phone when pairing (0 = phone default, ~1 year).
 	HISTORY_SYNC_DAYS_LIMIT = "HISTORY_SYNC_DAYS_LIMIT"
+	// Monitoring: timezone of the daily totals and days the per-event detail is kept.
+	METRICS_TIMEZONE       = "METRICS_TIMEZONE"
+	METRICS_RETENTION_DAYS = "METRICS_RETENTION_DAYS"
 )
