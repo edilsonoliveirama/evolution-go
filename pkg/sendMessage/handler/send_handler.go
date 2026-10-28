@@ -540,12 +540,15 @@ func (s *sendHandler) SendButton(ctx *gin.Context) {
 		return
 	}
 
-	if data.Description == "" {
+	// The Pix card only shows the title.
+	isPix := len(data.Buttons) == 1 && data.Buttons[0].Type == "pix"
+
+	if data.Description == "" && !isPix {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "description is required"})
 		return
 	}
 
-	if data.Footer == "" {
+	if data.Footer == "" && !isPix {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "footer is required"})
 		return
 	}

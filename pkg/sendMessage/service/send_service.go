@@ -2001,7 +2001,7 @@ func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.In
 	}
 
 	// Build biz/bot nodes injected directly in the XMPP stanza — required for mobile rendering.
-	// Reply-only buttons get <biz><buttons/></biz>; CTA/Pix get <biz><interactive type="native_flow" v="1"><native_flow name="X"/></interactive></biz>.
+	// Every type gets <biz><interactive type="native_flow" v="1"><native_flow name="X"/></interactive></biz> (quick_reply, payment_info or mixed).
 	// The <bot biz_bot="1"/> node is required for 1:1 chats (skipped on groups).
 	var bizInteractiveContent waBinary.Node
 	if hasReply && !hasOtherTypes && !hasPix {
@@ -2063,21 +2063,89 @@ func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.In
 	}
 
 	// Route through centralized SendMessage for ContextInfo, webhooks, quotes, mentions.
-	message, err := s.SendMessage(instance, msg, msgType, &SendDataStruct{
-		Number:          data.Number,
-		Delay:           data.Delay,
-		MentionAll:      data.MentionAll,
-		MentionedJID:    data.MentionedJID,
-		FormatJid:       data.FormatJid,
-		Quoted:          data.Quoted,
-		AdditionalNodes: &bizNodes,
-	})
+	message, err := s.sendInteractive(instance, msg, msgType, &SendDataStruct{
+		Number:       data.Number,
+		Delay:        data.Delay,
+		MentionAll:   data.MentionAll,
+		MentionedJID: data.MentionedJID,
+		FormatJid:    data.FormatJid,
+		Quoted:       data.Quoted,
+	}, bizNodes)
 	if err != nil {
 		s.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error sending button message: %v", instance.Id, err)
 		return nil, err
 	}
 
 	return message, nil
+}
+
+// interactiveVariant is one way of sending a button/list message: which extra
+// stanza nodes go along and whether the DocumentWithCaptionMessage wrapper is kept.
+type interactiveVariant struct {
+	name    string
+	nodes   []waBinary.Node
+	wrapped bool
+}
+
+func interactiveVariants(nodes []waBinary.Node) []interactiveVariant {
+	var withoutBot []waBinary.Node
+	for _, n := range nodes {
+		if n.Tag != "bot" {
+			withoutBot = append(withoutBot, n)
+		}
+	}
+	variants := []interactiveVariant{{name: "biz+bot", nodes: nodes, wrapped: true}}
+	if len(withoutBot) != len(nodes) {
+		variants = append(variants, interactiveVariant{name: "biz", nodes: withoutBot, wrapped: true})
+	}
+	return append(variants,
+		interactiveVariant{name: "no-nodes", wrapped: true},
+		interactiveVariant{name: "no-nodes-unwrapped"},
+	)
+}
+
+// unwrapDocumentWithCaption moves the wrapped message (buttons, list...) to the
+// top level, keeping the MessageContextInfo.
+func unwrapDocumentWithCaption(msg *waE2E.Message) *waE2E.Message {
+	inner := msg.GetDocumentWithCaptionMessage().GetMessage()
+	if inner == nil {
+		return msg
+	}
+	out := proto.Clone(inner).(*waE2E.Message)
+	out.MessageContextInfo = msg.GetMessageContextInfo()
+	return out
+}
+
+// sendInteractive sends a button or list message. WhatsApp rejects the biz/bot
+// stanza nodes for some accounts (server error 405/473), so on a server
+// rejection it retries with fewer nodes and, last, without the wrapper.
+func (s *sendService) sendInteractive(instance *instance_model.Instance, msg *waE2E.Message, messageType string, data *SendDataStruct, nodes []waBinary.Node) (*MessageSendStruct, error) {
+	log := s.loggerWrapper.GetLogger(instance.Id)
+	var lastErr error
+	for i, v := range interactiveVariants(nodes) {
+		attempt := *data
+		if len(v.nodes) > 0 {
+			n := v.nodes
+			attempt.AdditionalNodes = &n
+		}
+		m := msg
+		if !v.wrapped {
+			m = unwrapDocumentWithCaption(msg)
+		}
+		message, err := s.SendMessage(instance, m, messageType, &attempt)
+		if err == nil {
+			if i > 0 {
+				log.LogWarn("[%s] %s sent with variant %q after WhatsApp rejected the previous ones", instance.Id, messageType, v.name)
+			}
+			return message, nil
+		}
+		if !errors.Is(err, whatsmeow.ErrServerReturnedError) {
+			return nil, err
+		}
+		log.LogWarn("[%s] %s rejected by WhatsApp with variant %q: %v", instance.Id, messageType, v.name, err)
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func stringPointer(s string) *string {
@@ -2330,15 +2398,14 @@ func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instan
 		})
 	}
 
-	message, err := s.SendMessage(instance, msg, "ListMessage", &SendDataStruct{
-		Number:          data.Number,
-		Delay:           data.Delay,
-		MentionAll:      data.MentionAll,
-		MentionedJID:    data.MentionedJID,
-		FormatJid:       data.FormatJid,
-		Quoted:          data.Quoted,
-		AdditionalNodes: &listBizNodes,
-	})
+	message, err := s.sendInteractive(instance, msg, "ListMessage", &SendDataStruct{
+		Number:       data.Number,
+		Delay:        data.Delay,
+		MentionAll:   data.MentionAll,
+		MentionedJID: data.MentionedJID,
+		FormatJid:    data.FormatJid,
+		Quoted:       data.Quoted,
+	}, listBizNodes)
 
 	if err != nil {
 		s.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error sending list: %v", instance.Id, err)
