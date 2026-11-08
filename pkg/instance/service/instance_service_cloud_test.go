@@ -1,6 +1,8 @@
 package instance_service
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/evolution-foundation/evolution-go/pkg/cloudapi"
@@ -98,13 +100,32 @@ func TestConnect_CloudEngine(t *testing.T) {
 		Connected:        false,
 	}
 
+	// Set up a mock Meta API server so cloudApiService.Connect can validate.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"verified_name": "My Biz","display_phone_number":"[TELEFONE_BR_REDACTED]","id":"987654321"}`))
+	}))
+	defer srv.Close()
+
+	client := cloudapi.NewMetaClient(srv.URL, "", srv.Client())
+	svc := &instances{
+		cloudApiService: cloudapi.NewCloudApiService(client, nil, nil),
+		instanceRepository: instanceService.(*instances).instanceRepository,
+	}
+	if existing, ok := instanceService.(*instances); ok {
+		svc.killChannel = existing.killChannel
+		svc.clientPointer = existing.clientPointer
+		svc.loggerWrapper = existing.loggerWrapper
+	}
+
 	connectData := &ConnectStruct{
 		WebhookUrl:      "https://example.com/webhook",
 		Subscribe:       []string{"MESSAGE"},
 		Phone:           "",
 	}
 
-	_, _, _, err := instanceService.Connect(connectData, instance)
+	_, _, _, err := svc.Connect(connectData, instance)
 	if err != nil {
 		t.Fatalf("Connect for cloudapi engine should succeed, got: %v (AC: CLOUD-05)", err)
 	}

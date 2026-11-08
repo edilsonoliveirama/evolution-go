@@ -225,6 +225,31 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 		if data.MetaToken == "" || data.MetaAppSecret == "" || data.MetaVerifyToken == "" || data.MetaPhoneNumberId == "" {
 			return nil, fmt.Errorf("meta credentials incomplete: MetaToken, MetaAppSecret, MetaVerifyToken, and MetaPhoneNumberId are required for cloudapi engine")
 		}
+		// Encrypt Meta credentials at rest (F-001).
+		encKey := cloudapi.GetDecodedKey("")
+		if i.cloudApiService != nil && i.cloudApiService.GetConfig() != nil {
+			encKey = i.cloudApiService.GetConfig().EncryptionKey
+		}
+		if len(encKey) == 32 {
+			if instance.MetaToken != "" {
+				encrypted, err := cloudapi.EncryptMetaCredential([]byte(instance.MetaToken), encKey)
+				if err == nil {
+					instance.MetaToken = string(encrypted)
+				}
+			}
+			if instance.MetaAppSecret != "" {
+				encrypted, err := cloudapi.EncryptMetaCredential([]byte(instance.MetaAppSecret), encKey)
+				if err == nil {
+					instance.MetaAppSecret = string(encrypted)
+				}
+			}
+			if instance.MetaVerifyToken != "" {
+				encrypted, err := cloudapi.EncryptMetaCredential([]byte(instance.MetaVerifyToken), encKey)
+				if err == nil {
+					instance.MetaVerifyToken = string(encrypted)
+				}
+			}
+		}
 	}
 
 	// Set advanced settings if provided
@@ -1010,6 +1035,23 @@ func NewInstanceService(
 		whatsmeowService:   whatsmeowService,
 		config:             config,
 		loggerWrapper:      loggerWrapper,
+	}
+	// Configure CloudApiService encryption keys from config if cloudApiService is set.
+	if svc.cloudApiService != nil && config != nil {
+		if config.MetaCredentialsEncryptionKey != "" {
+			decoded := cloudapi.GetDecodedKey(config.MetaCredentialsEncryptionKey)
+			if len(decoded) == 32 {
+				cfg := &cloudapi.CloudApiConfig{}
+				cfg.EncryptionKey = decoded
+				if config.MetaCredentialsEncryptionKeyPrev != "" {
+					prevDecoded := cloudapi.GetDecodedKey(config.MetaCredentialsEncryptionKeyPrev)
+					if len(prevDecoded) == 32 {
+						cfg.EncryptionKeyPrev = prevDecoded
+					}
+				}
+				svc.cloudApiService.SetConfig(cfg)
+			}
+		}
 	}
 	// Set the package-level instanceService variable for tests.
 	if svc != nil {

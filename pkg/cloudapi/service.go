@@ -60,22 +60,11 @@ func (s *CloudApiService) Connect(instance *Instance) error {
 		return fmt.Errorf("Meta Phone Number ID is required")
 	}
 
-	// Use GetPhoneNumber to validate credentials and resolve phone info.
 	if s.client == nil {
-		// Test context without a real Meta client — simulated validation.
-		if strings.Contains(instance.MetaToken, "Invalid") {
-			instance.Connected = false
-			if instance.DisconnectReason == "" {
-				instance.DisconnectReason = "invalid token"
-			}
-			return fmt.Errorf("credential validation failed: invalid token")
-		}
-		instance.Connected = true
-		instance.DisconnectReason = ""
-		return nil
+		return fmt.Errorf("Meta client not configured")
 	}
 
-	info, err := s.client.GetPhoneNumber(instance.MetaPhoneNumberId)
+		info, err := s.client.GetPhoneNumber(instance.MetaPhoneNumberId)
 	if err != nil {
 		instance.Connected = false
 		if instance.DisconnectReason == "" {
@@ -139,14 +128,30 @@ func (s *CloudApiService) ValidateInstanceCredentials(instance *Instance) error 
 }
 
 // StartHealthChecks starts a goroutine that periodically validates credentials.
-func (s *CloudApiService) StartHealthChecks(ctx context.Context, interval time.Duration) {
+func (s *CloudApiService) StartHealthChecks(ctx context.Context, interval time.Duration, getInstances func() []*Instance) {
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				// Health check runs on demand per-instance via monitoring service.
+				if getInstances == nil {
+					continue
+				}
+				instances := getInstances()
+				for _, inst := range instances {
+					if inst != nil && inst.Engine == "cloudapi" && inst.Connected {
+						err := s.ValidateInstanceCredentials(inst)
+						if err != nil {
+							if s.logger != nil {
+								s.logger.LogError(inst.Id, "[%s] Health check failed for Cloud API instance: %v", inst.Id, err)
+							}
+						}
+					}
+				}
 			case <-ctx.Done():
 				return
 			case <-s.stopCh:
@@ -154,6 +159,45 @@ func (s *CloudApiService) StartHealthChecks(ctx context.Context, interval time.D
 			}
 		}
 	}()
+}
+
+// SetEncryptionKeys sets the current and previous encryption keys on the service config.
+func (s *CloudApiService) SetEncryptionKeys(currentKey, previousKey []byte) {
+	if s == nil {
+		return
+	}
+	if len(currentKey) == 32 {
+		if s.config == nil {
+			s.config = &CloudApiConfig{}
+		}
+		s.config.EncryptionKey = currentKey
+	}
+	if len(previousKey) == 32 {
+		if s.config == nil {
+			s.config = &CloudApiConfig{}
+		}
+		s.config.EncryptionKeyPrev = previousKey
+	}
+}
+
+// SetConfig sets the CloudApiConfig on the service (for setting encryption keys from main).
+func (s *CloudApiService) SetConfig(cfg *CloudApiConfig) {
+	if s != nil && cfg != nil {
+		s.config = cfg
+	}
+}
+
+// GetConfig returns the service's CloudApiConfig (or nil).
+func (s *CloudApiService) GetConfig() *CloudApiConfig {
+	if s == nil {
+		return nil
+	}
+	return s.config
+}
+
+// GetDecodedKey decodes a base64-encoded 32-byte key. Exportado para uso por instance_service.
+func GetDecodedKey(keyStr string) []byte {
+	return decodeBase64Key(keyStr)
 }
 
 // Stop stops the health check goroutine.
@@ -186,8 +230,8 @@ func (s *CloudApiService) SendUnsupportedOperation(instance *Instance, operation
 	return fmt.Errorf("operacao nao suportada para instancias Cloud API")
 }
 
-// decodeBase64Key decodes a base64-encoded 32-byte key.
-func decodeBase64Key(keyStr string) []byte {
+// DecodeBase64Key decodes a base64-encoded 32-byte key. Exportado para uso por instance_service.
+func DecodeBase64Key(keyStr string) []byte {
 	if keyStr == "" {
 		return nil
 	}
@@ -196,4 +240,9 @@ func decodeBase64Key(keyStr string) []byte {
 		return nil
 	}
 	return decoded
+}
+
+// decodeBase64Key decodes a base64-encoded 32-byte key (wraps DecodeBase64Key).
+func decodeBase64Key(keyStr string) []byte {
+	return DecodeBase64Key(keyStr)
 }

@@ -189,10 +189,22 @@ func (h *CloudApiHandler) HandleWebhookPOST(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
+		// Decrypt MetaAppSecret before use (F-003).
+		appSecret := inst.MetaAppSecret
+		if h.service != nil && h.service.config != nil && len(inst.MetaAppSecret) > 12 {
+			if decrypted, err := DecryptWithFallback(
+				[]byte(inst.MetaAppSecret),
+				h.service.config.EncryptionKey,
+				h.service.config.EncryptionKeyPrev,
+			); err == nil {
+				appSecret = string(decrypted)
+			}
+		}
+
 		// Verify HMAC-SHA256 signature. Handle both "sha256=" and "sha256+" prefixes.
 		sig = strings.TrimPrefix(sig, "sha256=")
 		sig = strings.TrimPrefix(sig, "sha256+")
-		computedSig := computeHMACSHA256([]byte(inst.MetaAppSecret), body)
+		computedSig := computeHMACSHA256([]byte(appSecret), body)
 		if !hmac.Equal([]byte(sig), []byte(computedSig)) {
 			http.Error(w, `{"error":"verification failed"}`, http.StatusUnauthorized)
 			return
@@ -223,6 +235,14 @@ func (h *CloudApiHandler) HandleWebhookPOST(w http.ResponseWriter, r *http.Reque
 	if err := h.validatePayload(&payload); err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
 		return
+	}
+
+	// 4c. Process events (emit via WebhookService).
+	if h.instanceRepo != nil {
+		instanceId := extractInstanceId(r)
+		if inst, err := h.instanceRepo.FindInstance(instanceId); err == nil && inst != nil {
+			h.processPayload(inst, body)
+		}
 	}
 
 	// 5. Dedup check: only when we have a service (production mode).
@@ -323,6 +343,68 @@ func validatePayloadConstraints(payload *MetaWebhookPayload) error {
 	return nil
 }
 
-// processPayload emits events for webhook payload.
-func (h *CloudApiHandler) processPayload(body []byte) {
+// processPayload emits events for webhook payload via WebhookService.
+func (h *CloudApiHandler) processPayload(instance *Instance, body []byte) {
+	if h.service == nil || h.service.webhookSvc == nil {
+		return
+	}
+
+	var payload MetaWebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return
+	}
+
+	for _, entry := range payload.Entry {
+		for _, change := range entry.Changes {
+			// Process inbound messages → MESSAGE event.
+			for _, msg := range change.Value.Messages {
+				msgID, _ := msg["id"].(string)
+				if msgID != "" {
+					h.service.webhookSvc.CallWebhook(instance, "onMessage", map[string]interface{}{
+						"event": "onMessage",
+						"data":  msg,
+					})
+				}
+			}
+			// Process status updates → SEND_MESSAGE / READ_RECEIPT.
+			for _, status := range change.Value.Statuses {
+				statusID, _ := status["id"].(string)
+				statusType, _ := status["status"].(string)
+				eventName := "onSendMessage"
+				if statusType == "read" {
+					eventName = "onReadReceipt"
+				}
+				payload := map[string]interface{}{
+					"event": eventName,
+					"data":  status,
+				}
+				if statusType != "" && statusID != "" {
+					h.service.webhookSvc.CallWebhook(instance, eventName, payload)
+				}
+			}
+		}
+	}
+}
+
+// DecryptInstanceCredentials decrypts encrypted Meta credentials on the instance.
+func DecryptInstanceCredentials(inst *Instance, currentKey, previousKey []byte) error {
+	if inst.MetaToken != "" && len(inst.MetaToken) > 12 {
+		decrypted, err := DecryptWithFallback([]byte(inst.MetaToken), currentKey, previousKey)
+		if err == nil {
+			inst.MetaToken = string(decrypted)
+		}
+	}
+	if inst.MetaAppSecret != "" && len(inst.MetaAppSecret) > 12 {
+		decrypted, err := DecryptWithFallback([]byte(inst.MetaAppSecret), currentKey, previousKey)
+		if err == nil {
+			inst.MetaAppSecret = string(decrypted)
+		}
+	}
+	if inst.MetaVerifyToken != "" && len(inst.MetaVerifyToken) > 12 {
+		decrypted, err := DecryptWithFallback([]byte(inst.MetaVerifyToken), currentKey, previousKey)
+		if err == nil {
+			inst.MetaVerifyToken = string(decrypted)
+		}
+	}
+	return nil
 }

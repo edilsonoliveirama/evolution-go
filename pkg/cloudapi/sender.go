@@ -147,10 +147,13 @@ func (s *CloudApiService) SendTemplate(instance *Instance, to string, template *
 			if len(comp.Parameters) > 0 {
 				var params []map[string]interface{}
 				for _, p := range comp.Parameters {
-					params = append(params, map[string]interface{}{
+					param := map[string]interface{}{
 						"type": p.Type,
-						p.Type: p.Text,
-					})
+					}
+					if p.Text != "" {
+						param[p.Type] = p.Text
+					}
+					params = append(params, param)
 				}
 				compMap["parameters"] = params
 			}
