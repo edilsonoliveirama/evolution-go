@@ -16,6 +16,17 @@ func (s *CloudApiService) SendText(instance *Instance, to, text, messageID strin
 		return nil, fmt.Errorf("instance is not connected")
 	}
 
+	// Decrypt the Meta token for this request (NF-001).
+	var encKey, encKeyPrev []byte
+	if s.config != nil {
+		encKey = s.config.EncryptionKey
+		encKeyPrev = s.config.EncryptionKeyPrev
+	}
+	decryptedToken := decryptInstanceToken(instance, encKey, encKeyPrev)
+	if decryptedToken == "" {
+		return nil, fmt.Errorf("failed to decrypt Meta token")
+	}
+
 	payload := map[string]interface{}{
 		"messaging_product": "whatsapp",
 		"recipient_type":    "individual",
@@ -36,7 +47,7 @@ func (s *CloudApiService) SendText(instance *Instance, to, text, messageID strin
 		return nil, fmt.Errorf("failed to marshal text payload: %w", err)
 	}
 
-	resp, err := s.client.SendMessage(instance.MetaPhoneNumberId, body)
+	resp, err := s.client.SendMessage(instance.MetaPhoneNumberId, body, decryptedToken)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +63,17 @@ func (s *CloudApiService) SendMedia(instance *Instance, to, mediaType, caption, 
 	}
 	if !instance.Connected {
 		return nil, fmt.Errorf("instance is not connected")
+	}
+
+	// Decrypt the Meta token for this request (NF-001).
+	var encKey, encKeyPrev []byte
+	if s.config != nil {
+		encKey = s.config.EncryptionKey
+		encKeyPrev = s.config.EncryptionKeyPrev
+	}
+	decryptedToken := decryptInstanceToken(instance, encKey, encKeyPrev)
+	if decryptedToken == "" {
+		return nil, fmt.Errorf("failed to decrypt Meta token")
 	}
 
 	// Validate MIME type against declared type.
@@ -75,7 +97,7 @@ func (s *CloudApiService) SendMedia(instance *Instance, to, mediaType, caption, 
 	// When client is nil (test mode), skip upload and return a basic response.
 	var uploadID string
 	if s.client != nil {
-		uploadResp, err := s.client.UploadMedia(instance.MetaPhoneNumberId, fileData, mimeType)
+		uploadResp, err := s.client.UploadMedia(instance.MetaPhoneNumberId, fileData, mimeType, decryptedToken)
 		if err != nil {
 			return nil, fmt.Errorf("media upload failed: %w", err)
 		}
@@ -110,7 +132,7 @@ func (s *CloudApiService) SendMedia(instance *Instance, to, mediaType, caption, 
 	}
 
 	if s.client != nil {
-		resp, err := s.client.SendMessage(instance.MetaPhoneNumberId, body)
+		resp, err := s.client.SendMessage(instance.MetaPhoneNumberId, body, decryptedToken)
 		if err != nil {
 			return nil, err
 		}
@@ -131,6 +153,17 @@ func (s *CloudApiService) SendTemplate(instance *Instance, to string, template *
 	}
 	if !instance.Connected {
 		return nil, fmt.Errorf("instance is not connected")
+	}
+
+	// Decrypt the Meta token for this request (NF-001).
+	var encKey, encKeyPrev []byte
+	if s.config != nil {
+		encKey = s.config.EncryptionKey
+		encKeyPrev = s.config.EncryptionKeyPrev
+	}
+	decryptedToken := decryptInstanceToken(instance, encKey, encKeyPrev)
+	if decryptedToken == "" {
+		return nil, fmt.Errorf("failed to decrypt Meta token")
 	}
 
 	templatePayload := map[string]interface{}{
@@ -175,7 +208,7 @@ func (s *CloudApiService) SendTemplate(instance *Instance, to string, template *
 		return nil, fmt.Errorf("failed to marshal template payload: %w", err)
 	}
 
-	resp, err := s.client.SendMessage(instance.MetaPhoneNumberId, body)
+	resp, err := s.client.SendMessage(instance.MetaPhoneNumberId, body, decryptedToken)
 	if err != nil {
 		return nil, err
 	}

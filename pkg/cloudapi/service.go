@@ -64,7 +64,18 @@ func (s *CloudApiService) Connect(instance *Instance) error {
 		return fmt.Errorf("Meta client not configured")
 	}
 
-		info, err := s.client.GetPhoneNumber(instance.MetaPhoneNumberId)
+	// Decrypt the Meta token for this request (NF-001).
+	var encKey, encKeyPrev []byte
+	if s.config != nil {
+		encKey = s.config.EncryptionKey
+		encKeyPrev = s.config.EncryptionKeyPrev
+	}
+	decryptedToken := decryptInstanceToken(instance, encKey, encKeyPrev)
+	if decryptedToken == "" {
+		return fmt.Errorf("failed to decrypt Meta token")
+	}
+
+	info, err := s.client.GetPhoneNumber(instance.MetaPhoneNumberId, decryptedToken)
 	if err != nil {
 		instance.Connected = false
 		if instance.DisconnectReason == "" {
@@ -115,7 +126,20 @@ func (s *CloudApiService) ValidateInstanceCredentials(instance *Instance) error 
 		return fmt.Errorf("instance is not connected")
 	}
 
-	_, err := s.client.GetPhoneNumber(instance.MetaPhoneNumberId)
+	// Decrypt the Meta token for this request (NF-001).
+	var encKey, encKeyPrev []byte
+	if s.config != nil {
+		encKey = s.config.EncryptionKey
+		encKeyPrev = s.config.EncryptionKeyPrev
+	}
+	decryptedToken := decryptInstanceToken(instance, encKey, encKeyPrev)
+	if decryptedToken == "" {
+		instance.Connected = false
+		instance.DisconnectReason = "encryption_key_error"
+		return fmt.Errorf("failed to decrypt Meta token")
+	}
+
+	_, err := s.client.GetPhoneNumber(instance.MetaPhoneNumberId, decryptedToken)
 	if err != nil {
 		instance.Connected = false
 		if instance.DisconnectReason == "" {
@@ -211,6 +235,26 @@ func decryptToken(encrypted, key []byte) ([]byte, error) {
 		return nil, fmt.Errorf("no encrypted token")
 	}
 	return DecryptMetaCredential(encrypted, key)
+}
+
+// decryptInstanceToken decrypts the MetaToken from an instance using current key
+// (falling back to previous key if configured). If the token is not encrypted
+// (length <= 20 bytes — e.g., plain text in tests), it is returned as-is because
+// real AES-256-GCM encrypted tokens are always >= 28 bytes (12-byte nonce + tag).
+// Returns empty string on decryption failure.
+func decryptInstanceToken(instance *Instance, currentKey, previousKey []byte) string {
+	if instance.MetaToken == "" {
+		return ""
+	}
+	// Short tokens (<= 20 bytes) are considered unencrypted (test mode / plain text).
+	if len(instance.MetaToken) <= 20 {
+		return instance.MetaToken
+	}
+	decrypted, err := DecryptWithFallback([]byte(instance.MetaToken), currentKey, previousKey)
+	if err != nil {
+		return ""
+	}
+	return string(decrypted)
 }
 
 // maskPhoneNumber masks a phone number ID showing only the last 4 digits.

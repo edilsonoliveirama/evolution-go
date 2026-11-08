@@ -133,7 +133,7 @@ func TestMetaClient_SendMessage_Success(t *testing.T) {
 
 	client := NewMetaClient(srv.URL, "", srv.Client())
 	payload := []byte(`{"messaging_product":"whatsapp","type":"text","text":{"body":"Hello"}}`)
-	resp, err := client.SendMessage("987654321", payload)
+	resp, err := client.SendMessage("987654321", payload, "test-token")
 	if err != nil {
 		t.Fatalf("SendMessage returned unexpected error: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestMetaClient_SendMessage_ApiError(t *testing.T) {
 
 	client := NewMetaClient(srv.URL, "", srv.Client())
 	payload := []byte(`{"messaging_product":"whatsapp","type":"text","text":{"body":"Hello"}}`)
-	_, err := client.SendMessage("987654321", payload)
+	_, err := client.SendMessage("987654321", payload, "test-token")
 	if err == nil {
 		t.Fatal("SendMessage outside 24h window should return an error (AC: CLOUD-18)")
 	}
@@ -175,7 +175,7 @@ func TestMetaClient_UploadMedia_Success(t *testing.T) {
 	defer srv.Close()
 
 	client := NewMetaClient(srv.URL, "", srv.Client())
-	resp, err := client.UploadMedia("987654321", []byte("fake-image-data"), "image/jpeg")
+	resp, err := client.UploadMedia("987654321", []byte("fake-image-data"), "image/jpeg", "test-token")
 	if err != nil {
 		t.Fatalf("UploadMedia returned unexpected error: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestMetaClient_GetPhoneNumber_Success(t *testing.T) {
 	defer srv.Close()
 
 	client := NewMetaClient(srv.URL, "", srv.Client())
-	info, err := client.GetPhoneNumber("987654321")
+	info, err := client.GetPhoneNumber("987654321", "test-token")
 	if err != nil {
 		t.Fatalf("GetPhoneNumber returned unexpected error: %v", err)
 	}

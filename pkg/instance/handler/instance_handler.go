@@ -402,6 +402,7 @@ func (i *instanceHandler) Stats(ctx *gin.Context) {
 // @Param instanceId path string true "Instance Id"
 // @Success 200 {object} gin.H "Instance"
 // @Failure 400 {object} gin.H "Error on validation"
+// @Failure 401 {object} gin.H "Not authorized"
 // @Failure 500 {object} gin.H "Internal server error"
 // @Router /instance/info/{instanceId} [get]
 func (i *instanceHandler) Info(ctx *gin.Context) {
@@ -410,6 +411,18 @@ func (i *instanceHandler) Info(ctx *gin.Context) {
 	if instanceId == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "instanceId is required"})
 		return
+	}
+
+	// Per-instance authorization check (F-005, SEC-005):
+	// If the caller is global admin, allow access to any instance.
+	// If the caller is an instance token, verify it matches the requested instance.
+	apiKey := ctx.GetHeader("apikey")
+	if apiKey != i.config.GlobalApiKey {
+		callerInstance, err := i.instanceService.GetInstanceByToken(apiKey)
+		if err != nil || callerInstance == nil || callerInstance.Id != instanceId {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
+			return
+		}
 	}
 
 	instance, err := i.instanceService.Info(instanceId)

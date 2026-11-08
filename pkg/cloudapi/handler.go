@@ -137,8 +137,20 @@ func (h *CloudApiHandler) HandleWebhookGET(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		// Decrypt MetaVerifyToken before comparison (F-003).
+		verifyToken := inst.MetaVerifyToken
+		if h.service != nil && h.service.config != nil && len(inst.MetaVerifyToken) > 12 {
+			if decrypted, err := DecryptWithFallback(
+				[]byte(inst.MetaVerifyToken),
+				h.service.config.EncryptionKey,
+				h.service.config.EncryptionKeyPrev,
+			); err == nil {
+				verifyToken = string(decrypted)
+			}
+		}
+
 		// Constant-time compare of verify_token to prevent timing attacks.
-		if !hmac.Equal([]byte(token), []byte(inst.MetaVerifyToken)) {
+		if !hmac.Equal([]byte(token), []byte(verifyToken)) {
 			http.Error(w, `{"error":"verification failed"}`, http.StatusForbidden)
 			return
 		}
@@ -360,8 +372,8 @@ func (h *CloudApiHandler) processPayload(instance *Instance, body []byte) {
 			for _, msg := range change.Value.Messages {
 				msgID, _ := msg["id"].(string)
 				if msgID != "" {
-					h.service.webhookSvc.CallWebhook(instance, "onMessage", map[string]interface{}{
-						"event": "onMessage",
+					h.service.webhookSvc.CallWebhook(instance, "MESSAGE", map[string]interface{}{
+						"event": "MESSAGE",
 						"data":  msg,
 					})
 				}
@@ -370,16 +382,15 @@ func (h *CloudApiHandler) processPayload(instance *Instance, body []byte) {
 			for _, status := range change.Value.Statuses {
 				statusID, _ := status["id"].(string)
 				statusType, _ := status["status"].(string)
-				eventName := "onSendMessage"
+				eventName := "SEND_MESSAGE"
 				if statusType == "read" {
-					eventName = "onReadReceipt"
-				}
-				payload := map[string]interface{}{
-					"event": eventName,
-					"data":  status,
+					eventName = "READ_RECEIPT"
 				}
 				if statusType != "" && statusID != "" {
-					h.service.webhookSvc.CallWebhook(instance, eventName, payload)
+					h.service.webhookSvc.CallWebhook(instance, eventName, map[string]interface{}{
+						"event": eventName,
+						"data":  status,
+					})
 				}
 			}
 		}

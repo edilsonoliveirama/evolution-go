@@ -614,9 +614,12 @@ func (s *sendService) SendText(data *TextStruct, instance *instance_model.Instan
 		if s.cloudApiService == nil {
 			return nil, fmt.Errorf("cloud api service not available")
 		}
-		_, err := s.cloudApiService.SendText(instance, data.Number, data.Text, data.Id)
+		sendResp, err := s.cloudApiService.SendText(instance, data.Number, data.Text, data.Id)
 		if err != nil {
 			return nil, err
+		}
+		if sendResp != nil && len(sendResp.Messages) > 0 {
+			return &MessageSendStruct{Key: &MessageSendKey{ID: sendResp.Messages[0].ID}}, nil
 		}
 		return &MessageSendStruct{}, nil
 	}
@@ -1249,16 +1252,44 @@ func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte,
 	return nil, fmt.Errorf("failed to send media file after %d attempts", maxRetries)
 }
 
+// downloadFromURL downloads a URL and returns its bytes.
+func (s *sendService) downloadFromURL(url string) ([]byte, error) {
+	if url == "" {
+		return nil, fmt.Errorf("URL is empty")
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download URL: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("download failed with HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read downloaded data: %w", err)
+	}
+	return data, nil
+}
+
 func (s *sendService) SendMediaUrl(data *MediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		if !instance.Connected {
 			return nil, fmt.Errorf("instance is not connected")
 		}
 		if s.cloudApiService != nil {
-			_, err := s.cloudApiService.SendMedia(instance, data.Number, data.Type, data.Caption, data.Filename, nil)
+			fileData, err := s.downloadFromURL(data.Url)
+			if err != nil {
+				return nil, fmt.Errorf("failed to download from URL: %w", err)
+			}
+			sendResp, err := s.cloudApiService.SendMedia(instance, data.Number, data.Type, data.Caption, data.Filename, fileData)
 			if err != nil {
 				return nil, err
 			}
+			if sendResp != nil && len(sendResp.Messages) > 0 {
+				return &MessageSendStruct{Key: &MessageSendKey{ID: sendResp.Messages[0].ID}}, nil
+			}
+			return &MessageSendStruct{}, nil
 		}
 		return &MessageSendStruct{}, nil
 	}
@@ -3525,28 +3556,41 @@ func (s *sendService) SendTemplate(instance *instance_model.Instance, to string,
 				Name:     tmplName,
 				Language: tmplLang,
 			}
-			if comps, ok := template["components"].([]map[string]interface{}); ok {
-				for _, c := range comps {
-					comp := cloudapi.TemplateComponent{
-						Type: c["type"].(string),
+			if comps, ok := template["components"].([]interface{}); ok {
+				for _, compRaw := range comps {
+					c, cOk := compRaw.(map[string]interface{})
+					if !cOk {
+						continue
 					}
-					if params, ok := c["parameters"].([]map[string]interface{}); ok {
-						for _, p := range params {
+					compType, _ := c["type"].(string)
+					comp := cloudapi.TemplateComponent{
+						Type: compType,
+					}
+					if paramsRaw, pOk := c["parameters"].([]interface{}); pOk {
+						for _, paramRaw := range paramsRaw {
+							p, pmOk := paramRaw.(map[string]interface{})
+							if !pmOk {
+								continue
+							}
+							paramType, _ := p["type"].(string)
+							paramText, _ := p["text"].(string)
 							comp.Parameters = append(comp.Parameters, cloudapi.TemplateParameter{
-								Type: p["type"].(string),
-								Text: p["text"].(string),
+								Type: paramType,
+								Text: paramText,
 							})
 						}
 					}
 					tm.Components = append(tm.Components, comp)
 				}
 			}
-			_, err := s.cloudApiService.SendTemplate(instance, to, tm)
+			sendResp, err := s.cloudApiService.SendTemplate(instance, to, tm)
 			if err != nil {
 				return nil, err
 			}
-		}
-		return &MessageSendStruct{}, nil
+			if sendResp != nil && len(sendResp.Messages) > 0 {
+				return &MessageSendStruct{Key: &MessageSendKey{ID: sendResp.Messages[0].ID}}, nil
+			}
+			return &MessageSendStruct{}, nil
 	}
 	return nil, fmt.Errorf("template messages require cloudapi engine")
 }

@@ -208,14 +208,23 @@ func validateURLWithPrivateIPCheck(rawURL string, allowlist []string) error {
 	return nil
 }
 
-// doRequest performs an HTTP request and returns the response body.
-func (c *MetaClient) doRequest(method, fullURL string, body []byte) ([]byte, error) {
+// doRequest performs an HTTP request with the given access token and returns the response body.
+func (c *MetaClient) doRequest(method, fullURL string, body []byte, accessToken string) ([]byte, error) {
 	var reqBody io.Reader
 	if body != nil {
 		reqBody = bytes.NewReader(body)
 	}
 
-	req, err := http.NewRequest(method, fullURL, reqBody)
+	apiURL := fullURL
+	if accessToken != "" {
+		separator := "?"
+		if strings.Contains(fullURL, "?") {
+			separator = "&"
+		}
+		apiURL = fullURL + separator + "access_token=" + accessToken
+	}
+
+	req, err := http.NewRequest(method, apiURL, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -261,7 +270,7 @@ func newMetaAPIError(statusCode int, body []byte) error {
 // by fetching the business profile.
 func (c *MetaClient) ValidateCredentials(wabaID, token string) (*BusinessProfile, error) {
 	apiURL := fmt.Sprintf("%s/%s/%s?access_token=%s", c.BaseURL, c.Version, wabaID, token)
-	respBody, err := c.doRequest(http.MethodGet, apiURL, nil)
+	respBody, err := c.doRequest(http.MethodGet, apiURL, nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -287,10 +296,10 @@ func (c *MetaClient) ValidateCredentials(wabaID, token string) (*BusinessProfile
 	return &profile, nil
 }
 
-// SendMessage sends a message payload to the Meta Graph API.
-func (c *MetaClient) SendMessage(phoneNumberID string, payload []byte) (*SendResponse, error) {
+// SendMessage sends a message payload to the Meta Graph API with the given access token.
+func (c *MetaClient) SendMessage(phoneNumberID string, payload []byte, accessToken string) (*SendResponse, error) {
 	apiURL := fmt.Sprintf("%s/%s/%s/messages", c.BaseURL, c.Version, phoneNumberID)
-	respBody, err := c.doRequest(http.MethodPost, apiURL, payload)
+	respBody, err := c.doRequest(http.MethodPost, apiURL, payload, accessToken)
 	if err != nil {
 		return nil, err
 	}
@@ -302,9 +311,9 @@ func (c *MetaClient) SendMessage(phoneNumberID string, payload []byte) (*SendRes
 	return &sendResp, nil
 }
 
-// UploadMedia uploads media to the Meta Graph API and returns the media ID.
-func (c *MetaClient) UploadMedia(phoneNumberID string, data []byte, mimeType string) (*MediaUploadResponse, error) {
-	apiURL := fmt.Sprintf("%s/%s/%s/media", c.BaseURL, c.Version, phoneNumberID)
+// UploadMedia uploads media to the Meta Graph API with the given access token and returns the media ID.
+func (c *MetaClient) UploadMedia(phoneNumberID string, data []byte, mimeType string, accessToken string) (*MediaUploadResponse, error) {
+	apiURL := fmt.Sprintf("%s/%s/%s/media?access_token=%s", c.BaseURL, c.Version, phoneNumberID, accessToken)
 
 	// Build multipart form manually for Meta API.
 	var buf bytes.Buffer
@@ -376,10 +385,10 @@ func (c *MetaClient) DownloadMedia(mediaURL string) ([]byte, error) {
 	return data, nil
 }
 
-// GetPhoneNumber fetches phone number information from the Meta Graph API.
-func (c *MetaClient) GetPhoneNumber(phoneNumberID string) (*PhoneNumberInfo, error) {
+// GetPhoneNumber fetches phone number information from the Meta Graph API with the given access token.
+func (c *MetaClient) GetPhoneNumber(phoneNumberID string, accessToken string) (*PhoneNumberInfo, error) {
 	apiURL := fmt.Sprintf("%s/%s/%s", c.BaseURL, c.Version, phoneNumberID)
-	respBody, err := c.doRequest(http.MethodGet, apiURL, nil)
+	respBody, err := c.doRequest(http.MethodGet, apiURL, nil, accessToken)
 	if err != nil {
 		return nil, err
 	}
