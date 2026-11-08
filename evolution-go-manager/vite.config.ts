@@ -5,6 +5,9 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    outDir: '../manager/dist',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -14,7 +17,7 @@ export default defineConfig({
       '@hooks': path.resolve(__dirname, './src/hooks'),
       '@store': path.resolve(__dirname, './src/store'),
       '@types': path.resolve(__dirname, './src/types'),
-      '@utils': path.resolve(__dirname, './src/utils'),
+      '@utils': path.resolve(__dirname, './src/types'),
       '@styles': path.resolve(__dirname, './src/styles'),
     },
   },

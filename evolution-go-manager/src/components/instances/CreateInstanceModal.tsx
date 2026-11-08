@@ -41,7 +41,7 @@ const createInstanceSchema = z.object({
       /^[a-zA-Z0-9-_]+$/,
       'Nome deve conter apenas letras, números, hífen e underscore'
     ),
-  engine: z.enum(['whatsmeow', 'cloudapi']).default('whatsmeow'),
+  engine: z.enum(['whatsmeow', 'cloudapi']),
   token: z.string().optional(),
   metaWabaId: z.string().optional(),
   metaPhoneNumberId: z.string().optional(),
