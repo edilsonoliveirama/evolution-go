@@ -1,6 +1,11 @@
-package cloudapi
+﻿package cloudapi
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -313,7 +318,8 @@ func TestSSRF_RedirectDowngradeHTTPS(t *testing.T) {
 
 func TestSSRF_MaxRedirects(t *testing.T) {
 	redirectCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		redirectCount++
 		w.Header().Set("Location", srv.URL + "/redirect/" + fmt.Sprintf("%d", redirectCount))
 		w.WriteHeader(http.StatusFound)
@@ -445,14 +451,14 @@ func TestHandleWebhookGET_IdenticalResponseForMissingInstance(t *testing.T) {
 	// Generate a valid UUID-like instanceId that doesn't exist.
 	unknownUUID := "550e8400-e29b-41d4-a716-446655440000"
 
-	req := httptest.NewRequest(http.MethodGet, unknownUUID+"?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/"+unknownUUID+"?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=123", nil)
 	w := httptest.NewRecorder()
 	handler.HandleWebhookGET(w, req)
 	firstCode := w.Code
 	firstBody := w.Body.String()
 
 	// Different missing UUID with same wrong token.
-	req2 := httptest.NewRequest(http.MethodGet, "00000000-0000-0000-0000-000000000000?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=456", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/[CARTAO_CREDITO_REDACTED]-[CARTAO_CREDITO_REDACTED]?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=456", nil)
 	w2 := httptest.NewRecorder()
 	handler.HandleWebhookGET(w2, req2)
 
@@ -773,3 +779,5 @@ func TestDecryptWithFallback_BothKeysFail(t *testing.T) {
 		t.Fatal("DecryptWithFallback with both keys wrong should return error (SEC-003)")
 	}
 }
+
+

@@ -132,7 +132,7 @@ func TestIntegration_WebhookHandshakeAndPOST(t *testing.T) {
 }
 
 func TestIntegration_UnsupportedOperationReturns4xx(t *testing.T) {
-	handler := NewCloudApiHandler(nil, nil, nil)
+	_ = NewCloudApiHandler(nil, nil, nil) // handler instance created for structural completeness
 	instance := &Instance{
 		Engine:    "cloudapi",
 		Connected: true,
