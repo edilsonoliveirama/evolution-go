@@ -238,9 +238,12 @@ func TestMetaClient_GetPhoneNumber_Success(t *testing.T) {
 }
 
 func TestMetaClient_HTTPTimeout(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Hang indefinitely.
-		select {}
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Wait for the client to time out. Using <-r.Context().Done() instead of
+		// select{} ensures httptest.Server.Close() can shut down cleanly (the
+		// handler exits when the client disconnects / context is cancelled).
+		<-r.Context().Done()
 	}))
 	defer srv.Close()
 

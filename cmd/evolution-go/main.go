@@ -294,6 +294,7 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		chatwoot_handler.NewChatwootHandler(chatwootService),
 		typebot_handler.NewTypebotHandler(typebotService),
 		monitoring_handler.NewMonitoringHandler(monitoringService, config.GlobalApiKey),
+		cloudApiHandler,
 	).AssignRoutes(r)
 
 	if config.ConnectOnStartup {

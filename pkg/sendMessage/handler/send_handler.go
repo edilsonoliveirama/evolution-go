@@ -25,6 +25,7 @@ type SendHandler interface {
 	SendCarousel(ctx *gin.Context)
 	SendStatusText(ctx *gin.Context)
 	SendStatusMedia(ctx *gin.Context)
+	SendTemplate(ctx *gin.Context)
 }
 
 type sendHandler struct {
@@ -827,6 +828,43 @@ func (s *sendHandler) SendStatusMedia(ctx *gin.Context) {
 	message, err := s.sendMessageService.SendStatusMediaUrl(data, instance)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "success", "data": message})
+}
+
+// SendTemplate sends a template message
+// @Summary Send a template message
+// @Description Send a WhatsApp template message (Cloud API engine)
+// @Tags Send Message
+// @Accept json
+// @Produce json
+// @Param message body map[string]interface{} true "Template data"
+// @Success 200 {object} gin.H "success"
+// @Failure 400 {object} gin.H "Error on validation"
+// @Failure 500 {object} gin.H "Internal server error"
+// @Router /send/template [post]
+func (s *sendHandler) SendTemplate(ctx *gin.Context) {
+	getInstance := ctx.MustGet("instance")
+
+	instance, ok := getInstance.(*instance_model.Instance)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "instance not found"})
+		return
+	}
+
+	var templateData map[string]interface{}
+	if err := ctx.ShouldBindJSON(&templateData); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	number, _ := templateData["number"].(string)
+
+	message, err := s.sendMessageService.SendTemplate(instance, number, templateData)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

@@ -7,6 +7,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
+	cloudapi "github.com/evolution-foundation/evolution-go/pkg/cloudapi"
 	_ "github.com/evolution-foundation/evolution-go/docs"
 	call_handler "github.com/evolution-foundation/evolution-go/pkg/call/handler"
 	chat_handler "github.com/evolution-foundation/evolution-go/pkg/chat/handler"
@@ -44,9 +45,18 @@ type Routes struct {
 	chatwootHandler         chatwoot_handler.ChatwootHandler
 	typebotHandler          typebot_handler.TypebotHandler
 	monitoringHandler       monitoring_handler.MonitoringHandler
+	cloudApiHandler        *cloudapi.CloudApiHandler
 }
 
 func (r *Routes) AssignRoutes(eng *gin.Engine) {
+	// Meta WhatsApp Cloud API webhook routes — PUBLIC (called by Meta servers, no auth)
+	metaGroup := eng.Group("/meta")
+	metaGroup.GET("/webhook/:instanceId", gin.WrapF(func(w http.ResponseWriter, req *http.Request) {
+		r.cloudApiHandler.HandleWebhookGET(w, req)
+	}))
+	metaGroup.POST("/webhook/:instanceId", gin.WrapF(func(w http.ResponseWriter, req *http.Request) {
+		r.cloudApiHandler.HandleWebhookPOST(w, req)
+	}))
 	// Configuração do CORS
 	eng.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -129,6 +139,7 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 			routes.POST("/button", r.jidValidationMiddleware.ValidateNumberFieldWithFormatJid(), r.sendHandler.SendButton)
 			routes.POST("/list", r.jidValidationMiddleware.ValidateNumberFieldWithFormatJid(), r.sendHandler.SendList)
 			routes.POST("/carousel", r.jidValidationMiddleware.ValidateNumberFieldWithFormatJid(), r.sendHandler.SendCarousel)
+			routes.POST("/template", r.jidValidationMiddleware.ValidateNumberFieldWithFormatJid(), r.sendHandler.SendTemplate)
 			routes.POST("/status/text", r.sendHandler.SendStatusText)
 			routes.POST("/status/media", r.sendHandler.SendStatusMedia)
 		}
@@ -311,6 +322,7 @@ func NewRouter(
 	chatwootHandler chatwoot_handler.ChatwootHandler,
 	typebotHandler typebot_handler.TypebotHandler,
 	monitoringHandler monitoring_handler.MonitoringHandler,
+	cloudApiHandler *cloudapi.CloudApiHandler,
 ) *Routes {
 	return &Routes{
 		authMiddleware:          authMiddleware,
@@ -330,5 +342,6 @@ func NewRouter(
 		chatwootHandler:         chatwootHandler,
 		typebotHandler:          typebotHandler,
 		monitoringHandler:       monitoringHandler,
+		cloudApiHandler:        cloudApiHandler,
 	}
 }

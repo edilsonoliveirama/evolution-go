@@ -1,6 +1,6 @@
 /**
  * Create Instance Modal Component
- * Modal for creating a new WhatsApp instance
+ * Modal for creating a new WhatsApp instance with engine selection
  */
 
 import { useState } from 'react';
@@ -41,7 +41,13 @@ const createInstanceSchema = z.object({
       /^[a-zA-Z0-9-_]+$/,
       'Nome deve conter apenas letras, números, hífen e underscore'
     ),
+  engine: z.enum(['whatsmeow', 'cloudapi']).default('whatsmeow'),
   token: z.string().optional(),
+  metaWabaId: z.string().optional(),
+  metaPhoneNumberId: z.string().optional(),
+  metaToken: z.string().optional(),
+  metaAppSecret: z.string().optional(),
+  metaVerifyToken: z.string().optional(),
   proxyHost: z.string().optional(),
   proxyPort: z.string().optional(),
   proxyUsername: z.string().optional(),
@@ -56,6 +62,7 @@ export default function CreateInstanceModal({
 }: CreateInstanceModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showProxyConfig, setShowProxyConfig] = useState(false);
+  const [engine, setEngine] = useState<'whatsmeow' | 'cloudapi'>('whatsmeow');
   const { addInstance, fetchInstances } = useInstancesStore();
 
   const {
@@ -63,11 +70,17 @@ export default function CreateInstanceModal({
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<CreateInstanceFormData>({
+    } = useForm<CreateInstanceFormData>({
     resolver: zodResolver(createInstanceSchema),
     defaultValues: {
       instanceName: '',
+      engine: 'whatsmeow',
       token: '',
+      metaWabaId: '',
+      metaPhoneNumberId: '',
+      metaToken: '',
+      metaAppSecret: '',
+      metaVerifyToken: '',
       proxyHost: '',
       proxyPort: '',
       proxyUsername: '',
@@ -82,7 +95,17 @@ export default function CreateInstanceModal({
       const payload: CreateInstancePayload = {
         name: data.instanceName,
         token: data.token || uuidv4(), // Generate UUID if not provided
+        engine: engine,
       };
+
+      // Add Cloud API fields when cloudapi engine selected
+      if (engine === 'cloudapi') {
+        payload.metaWabaId = data.metaWabaId;
+        payload.metaPhoneNumberId = data.metaPhoneNumberId;
+        payload.metaToken = data.metaToken;
+        payload.metaAppSecret = data.metaAppSecret;
+        payload.metaVerifyToken = data.metaVerifyToken;
+      }
 
       // Add proxy configuration if provided
       if (data.proxyHost && data.proxyPort) {
@@ -126,6 +149,7 @@ export default function CreateInstanceModal({
       onOpenChange(false);
       reset();
       setShowProxyConfig(false);
+      setEngine('whatsmeow');
     }
   };
 
@@ -165,6 +189,105 @@ export default function CreateInstanceModal({
               Use apenas letras, números, hífen (-) e underscore (_)
             </p>
           </div>
+
+          {/* Engine Selector */}
+          <div className="space-y-2">
+            <Label>
+              Engine <span className="text-red-500">*</span>
+            </Label>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant={engine === 'whatsmeow' ? 'default' : 'outline'}
+                onClick={() => setEngine('whatsmeow')}
+                className={`flex-1 ${
+                  engine === 'whatsmeow'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-sidebar border-sidebar-border text-sidebar-foreground'
+                }`}
+              >
+                WhatsApp Web (whatsmeow)
+              </Button>
+              <Button
+                type="button"
+                variant={engine === 'cloudapi' ? 'default' : 'outline'}
+                onClick={() => setEngine('cloudapi')}
+                className={`flex-1 ${
+                  engine === 'cloudapi'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-sidebar border-sidebar-border text-sidebar-foreground'
+                }`}
+              >
+                Cloud API (oficial)
+              </Button>
+            </div>
+          </div>
+
+          {/* Cloud API Fields - shown only when cloudapi engine selected */}
+          {engine === 'cloudapi' && (
+            <div className="space-y-4 p-3 rounded-lg border border-blue-500/30 bg-blue-500/5">
+              <p className="text-sm font-medium text-blue-400">
+                Credenciais Meta Cloud API
+              </p>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="metaWabaId">WABA ID</Label>
+                  <Input
+                    id="metaWabaId"
+                    type="text"
+                    placeholder="ex: 123456789012345"
+                    disabled={isLoading}
+                    {...register('metaWabaId')}
+                    className="bg-sidebar border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="metaPhoneNumberId">Phone Number ID</Label>
+                  <Input
+                    id="metaPhoneNumberId"
+                    type="text"
+                    placeholder="ex: 987654321098765"
+                    disabled={isLoading}
+                    {...register('metaPhoneNumberId')}
+                    className="bg-sidebar border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="metaToken">Access Token</Label>
+                  <Input
+                    id="metaToken"
+                    type="password"
+                    placeholder="Token de acesso da Meta"
+                    disabled={isLoading}
+                    {...register('metaToken')}
+                    className="bg-sidebar border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="metaAppSecret">App Secret</Label>
+                  <Input
+                    id="metaAppSecret"
+                    type="password"
+                    placeholder="App Secret da Meta"
+                    disabled={isLoading}
+                    {...register('metaAppSecret')}
+                    className="bg-sidebar border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="metaVerifyToken">Verify Token</Label>
+                  <Input
+                    id="metaVerifyToken"
+                    type="password"
+                    placeholder="Webhook Verify Token"
+                    disabled={isLoading}
+                    {...register('metaVerifyToken')}
+                    className="bg-sidebar border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/50"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Token (Optional) */}
           <div className="space-y-2">

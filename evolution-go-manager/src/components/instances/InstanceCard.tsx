@@ -11,6 +11,7 @@ import {
   PowerOff,
   MessageSquare,
   FlaskConical,
+  Cloud,
 } from "lucide-react";
 import type { Instance } from "@/types/instance";
 
@@ -52,13 +53,14 @@ export default function InstanceCard({
   onTestMessage,
 }: InstanceCardProps) {
   const isConnected = instance.status === "open";
+  const isCloudApi = instance.engine === "cloudapi";
 
   return (
     <Card className="group relative bg-sidebar border-sidebar-border hover:bg-sidebar-accent/30 transition-all duration-300 hover:shadow-lg hover:shadow-black/10 overflow-hidden">
       <CardContent className="p-0">
         {/* Header with icon, name and status */}
         <div className="flex items-center gap-3 p-4 border-b border-sidebar-border">
-          {instance.profilePicUrl && (
+          {instance.profilePicUrl && !isCloudApi && (
             <div className="flex-shrink-0 dark">
               <div className="rounded-lg bg-gray-900 flex items-center justify-center w-14 h-14 overflow-hidden">
                 <img
@@ -74,6 +76,15 @@ export default function InstanceCard({
             </div>
           )}
 
+          {/* Cloud API icon for cloudapi engine */}
+          {isCloudApi && (
+            <div className="flex-shrink-0 dark">
+              <div className="rounded-lg bg-blue-500/20 flex items-center justify-center w-14 h-14">
+                <Cloud className="w-7 h-7 text-blue-400" />
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-base truncate text-sidebar-foreground">
               {instance.profileName || instance.instanceName}
@@ -81,6 +92,11 @@ export default function InstanceCard({
             <p className="text-xs text-sidebar-foreground/60 truncate">
               {instance.instanceName}
             </p>
+            {isCloudApi && (
+              <span className="text-xs text-blue-400 font-medium">
+                Cloud API
+              </span>
+            )}
           </div>
 
           <div className="flex-shrink-0">{getStatusBadge(instance.status)}</div>
@@ -92,7 +108,7 @@ export default function InstanceCard({
             <span>Status</span>
             <span className="font-mono">{instance.status}</span>
           </div>
-          {instance.profileStatus && (
+          {instance.profileStatus && !isCloudApi && (
             <div className="flex items-center justify-between">
               <span>Recado</span>
               <span className="font-mono truncate ml-2 max-w-[150px]">
@@ -108,6 +124,22 @@ export default function InstanceCard({
               </span>
             </div>
           )}
+          {isCloudApi && instance.metaPhoneNumber && (
+            <div className="flex items-center justify-between">
+              <span>Telefone</span>
+              <span className="font-mono truncate ml-2 max-w-[150px]">
+                {instance.metaPhoneNumber}
+              </span>
+            </div>
+          )}
+          {isCloudApi && instance.metaBusinessName && (
+            <div className="flex items-center justify-between">
+              <span>Negócio</span>
+              <span className="font-mono truncate ml-2 max-w-[150px]">
+                {instance.metaBusinessName}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Action buttons - hover effect */}
@@ -120,7 +152,7 @@ export default function InstanceCard({
               onClick={() => onConnect(instance)}
             >
               <Power className="h-4 w-4 mr-2" />
-              Conectar
+              {isCloudApi ? "Conectar" : "Conectar"}
             </Button>
           )}
 
@@ -135,10 +167,13 @@ export default function InstanceCard({
             </Button>
           )}
 
-          <div className="w-px bg-sidebar-border" />
+          {/* Cloud API does not support QR/Pair/QR-related features */}
+          {isCloudApi && (
+            <div className="bg-sidebar-border" />
+          )}
 
-          {/* Send Message Button - only show if connected */}
-          {isConnected && onSendMessage && (
+          {/* Send Message Button - only show if connected and not cloudapi */}
+          {isConnected && !isCloudApi && onSendMessage && (
             <>
               <Button
                 variant="ghost"
@@ -152,14 +187,14 @@ export default function InstanceCard({
             </>
           )}
 
-          {/* Test Interactive Messages Button - only show if connected */}
-          {isConnected && onTestMessage && (
+          {/* Test Interactive Messages Button - only show if connected and not cloudapi */}
+          {isConnected && !isCloudApi && onTestMessage && (
             <>
               <Button
                 variant="ghost"
                 className="rounded-none h-12 px-4 text-purple-500 hover:text-purple-400 hover:bg-purple-500/10"
                 onClick={() => onTestMessage(instance)}
-                title="Testar botoes, lista e carrossel"
+                title="Testar botões, lista e carrossel"
               >
                 <FlaskConical className="h-4 w-4" />
               </Button>
