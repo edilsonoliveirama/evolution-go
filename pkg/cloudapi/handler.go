@@ -15,7 +15,7 @@ import (
 
 // InstanceRepository defines the interface for looking up instances.
 type InstanceRepository interface {
-	FindInstance(instanceId string) (*Instance, error)
+	GetInstanceByID(instanceId string) (*Instance, error)
 }
 
 const (
@@ -130,7 +130,7 @@ func (h *CloudApiHandler) HandleWebhookGET(w http.ResponseWriter, r *http.Reques
 	// Look up the instance to validate the verify_token.
 	if h.instanceRepo != nil {
 		instanceId := extractInstanceId(r)
-		inst, err := h.instanceRepo.FindInstance(instanceId)
+		inst, err := h.instanceRepo.GetInstanceByID(instanceId)
 		if err != nil || inst == nil {
 			// Same response for missing instance as for wrong token (SEC-004).
 			http.Error(w, `{"error":"verification failed"}`, http.StatusForbidden)
@@ -195,7 +195,7 @@ func (h *CloudApiHandler) HandleWebhookPOST(w http.ResponseWriter, r *http.Reque
 
 		// Look up instance to get the app_secret for HMAC verification.
 		instanceId := extractInstanceId(r)
-		inst, err := h.instanceRepo.FindInstance(instanceId)
+		inst, err := h.instanceRepo.GetInstanceByID(instanceId)
 		if err != nil || inst == nil {
 			http.Error(w, `{"error":"verification failed"}`, http.StatusUnauthorized)
 			return
@@ -252,7 +252,7 @@ func (h *CloudApiHandler) HandleWebhookPOST(w http.ResponseWriter, r *http.Reque
 	// 4c. Process events (emit via WebhookService).
 	if h.instanceRepo != nil {
 		instanceId := extractInstanceId(r)
-		if inst, err := h.instanceRepo.FindInstance(instanceId); err == nil && inst != nil {
+		if inst, err := h.instanceRepo.GetInstanceByID(instanceId); err == nil && inst != nil {
 			h.processPayload(inst, body)
 		}
 	}

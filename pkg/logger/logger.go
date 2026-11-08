@@ -46,6 +46,18 @@ func NewLoggerManager(config *config.Config) *LoggerManager {
 	}
 }
 
+func (lm *LoggerManager) LogInfo(instanceID, format string, args ...interface{}) {
+	lm.GetLogger(instanceID).LogInfo(format, args...)
+}
+
+func (lm *LoggerManager) LogError(instanceID, format string, args ...interface{}) {
+	lm.GetLogger(instanceID).LogError(format, args...)
+}
+
+func (lm *LoggerManager) LogWarn(instanceID, format string, args ...interface{}) {
+	lm.GetLogger(instanceID).LogWarn(format, args...)
+}
+
 func (lm *LoggerManager) GetLogger(instanceId string) *Logger {
 	lm.mu.RLock()
 	logger, exists := lm.loggers[instanceId]

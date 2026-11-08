@@ -25,7 +25,7 @@ func newMockInstanceRepo() *mockInstanceRepo {
 	}
 }
 
-func (m *mockInstanceRepo) FindInstance(instanceId string) (*Instance, error) {
+func (m *mockInstanceRepo) GetInstanceByID(instanceId string) (*Instance, error) {
 	if m == nil {
 		return nil, fmt.Errorf("instance repository not configured")
 	}

@@ -24,7 +24,7 @@ import (
 	call_handler "github.com/evolution-foundation/evolution-go/pkg/call/handler"
 	call_service "github.com/evolution-foundation/evolution-go/pkg/call/service"
 	cloudapi "github.com/evolution-foundation/evolution-go/pkg/cloudapi"
-	chat_handler "github.com/evolution-foundation/evolution-go/pkg/call/handler"
+	chat_handler "github.com/evolution-foundation/evolution-go/pkg/chat/handler"
 	chat_service "github.com/evolution-foundation/evolution-go/pkg/chat/service"
 	chatwoot_handler "github.com/evolution-foundation/evolution-go/pkg/chatwoot/handler"
 	chatwoot_model "github.com/evolution-foundation/evolution-go/pkg/chatwoot/model"

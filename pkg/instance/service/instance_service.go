@@ -1027,6 +1027,7 @@ func NewInstanceService(
 	whatsmeowService whatsmeow_service.WhatsmeowService,
 	config *config.Config,
 	loggerWrapper *logger_wrapper.LoggerManager,
+	cloudApiService *cloudapi.CloudApiService,
 ) InstanceService {
 	svc := &instances{
 		instanceRepository: instanceRepository,
@@ -1035,6 +1036,7 @@ func NewInstanceService(
 		whatsmeowService:   whatsmeowService,
 		config:             config,
 		loggerWrapper:      loggerWrapper,
+		cloudApiService:    cloudApiService,
 	}
 	// Configure CloudApiService encryption keys from config if cloudApiService is set.
 	if svc.cloudApiService != nil && config != nil {

@@ -56,7 +56,7 @@ type SendService interface {
 	SendTemplate(instance *instance_model.Instance, to string, template map[string]interface{}) (*MessageSendStruct, error)
 }
 
-type sendService struct {
+type sendServiceType struct {
 	clientPointer    map[string]*whatsmeow.Client
 	whatsmeowService whatsmeow_service.WhatsmeowService
 	cloudApiService  *cloudapi.CloudApiService
@@ -65,7 +65,7 @@ type sendService struct {
 }
 
 // sendService is the package-level send service variable used by tests.
-var sendService SendService = &sendService{}
+var sendService SendService = &sendServiceType{}
 
 type SendDataStruct struct {
 	Id              string
@@ -387,7 +387,7 @@ type MessageSendStruct struct {
 	MessageContextInfo *waE2E.ContextInfo
 }
 
-func (s *sendService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+func (s *sendServiceType) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
 	client := s.clientPointer[instanceId]
 	s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
@@ -427,7 +427,7 @@ func (s *sendService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
 }
 
 // ensureClientConnectedWithRetry attempts to ensure client connection with automatic reconnection and retry
-func (s *sendService) ensureClientConnectedWithRetry(instanceId string, maxRetries int) (*whatsmeow.Client, error) {
+func (s *sendServiceType) ensureClientConnectedWithRetry(instanceId string, maxRetries int) (*whatsmeow.Client, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Connection attempt %d/%d", instanceId, attempt, maxRetries)
 
@@ -519,7 +519,7 @@ func validateMessageFields(phone string, formatJid *bool, messageID *string, par
 
 // validateAndCheckUserExists validates message fields and checks if the user exists on WhatsApp
 // Now uses the new approach: CheckUser with formatJid=false by default, and uses remoteJID for messaging
-func (s *sendService) validateAndCheckUserExists(phone string, formatJid *bool, messageID *string, participant *string, instance *instance_model.Instance) (types.JID, error) {
+func (s *sendServiceType) validateAndCheckUserExists(phone string, formatJid *bool, messageID *string, participant *string, instance *instance_model.Instance) (types.JID, error) {
 	// Skip WhatsApp check if disabled in config
 	if !s.config.CheckUserExists {
 		s.loggerWrapper.GetLogger(instance.Id).LogDebug("[%s] User existence check disabled by configuration", instance.Id)
@@ -572,7 +572,7 @@ func (s *sendService) validateAndCheckUserExists(phone string, formatJid *bool, 
 
 // checkSingleUserExists checks if a single user exists on WhatsApp with the specified formatJid setting
 // Returns: remoteJID, found, error
-func (s *sendService) checkSingleUserExists(client *whatsmeow.Client, phone string, formatJid bool, instanceId string) (string, bool, error) {
+func (s *sendServiceType) checkSingleUserExists(client *whatsmeow.Client, phone string, formatJid bool, instanceId string) (string, bool, error) {
 	phoneNumbers, err := utils.PrepareNumbersForWhatsAppCheck([]string{phone}, &formatJid)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to prepare number for WhatsApp check: %v", err)
@@ -609,24 +609,21 @@ func findURL(text string) string {
 	return ""
 }
 
-func (s *sendService) SendText(data *TextStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendText(data *TextStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		if s.cloudApiService == nil {
 			return nil, fmt.Errorf("cloud api service not available")
 		}
-		sendResp, err := s.cloudApiService.SendText(instance, data.Number, data.Text, data.Id)
+		_, err := s.cloudApiService.SendText(instance, data.Number, data.Text, data.Id)
 		if err != nil {
 			return nil, err
-		}
-		if sendResp != nil && len(sendResp.Messages) > 0 {
-			return &MessageSendStruct{Key: &MessageSendKey{ID: sendResp.Messages[0].ID}}, nil
 		}
 		return &MessageSendStruct{}, nil
 	}
 	return s.sendTextWithRetry(data, instance, 3) // 3 tentativas máximas
 }
 
-func (s *sendService) sendTextWithRetry(data *TextStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
+func (s *sendServiceType) sendTextWithRetry(data *TextStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendText attempt %d/%d", instance.Id, attempt, maxRetries)
 
@@ -727,11 +724,11 @@ func fetchLinkMetadata(url string) (string, string, string, error) {
 	return title, description, imgURL, nil
 }
 
-func (s *sendService) SendLink(data *LinkStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendLink(data *LinkStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	return s.sendLinkWithRetry(data, instance, 3)
 }
 
-func (s *sendService) sendLinkWithRetry(data *LinkStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
+func (s *sendServiceType) sendLinkWithRetry(data *LinkStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendLink attempt %d/%d", instance.Id, attempt, maxRetries)
 
@@ -964,7 +961,7 @@ func convertAudioToOpusWithDuration(inputData []byte) ([]byte, int, error) {
 	return convertedData, duration, nil
 }
 
-func (s *sendService) SendMediaFile(data *MediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendMediaFile(data *MediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		if !instance.Connected {
 			return nil, fmt.Errorf("instance is not connected")
@@ -980,7 +977,7 @@ func (s *sendService) SendMediaFile(data *MediaStruct, fileData []byte, instance
 	return s.sendMediaFileWithRetry(data, fileData, instance, 3)
 }
 
-func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
+func (s *sendServiceType) sendMediaFileWithRetry(data *MediaStruct, fileData []byte, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendMediaFile attempt %d/%d", instance.Id, attempt, maxRetries)
 
@@ -1253,7 +1250,7 @@ func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte,
 }
 
 // downloadFromURL downloads a URL and returns its bytes.
-func (s *sendService) downloadFromURL(url string) ([]byte, error) {
+func (s *sendServiceType) downloadFromURL(url string) ([]byte, error) {
 	if url == "" {
 		return nil, fmt.Errorf("URL is empty")
 	}
@@ -1272,7 +1269,7 @@ func (s *sendService) downloadFromURL(url string) ([]byte, error) {
 	return data, nil
 }
 
-func (s *sendService) SendMediaUrl(data *MediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendMediaUrl(data *MediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		if !instance.Connected {
 			return nil, fmt.Errorf("instance is not connected")
@@ -1287,7 +1284,7 @@ func (s *sendService) SendMediaUrl(data *MediaStruct, instance *instance_model.I
 				return nil, err
 			}
 			if sendResp != nil && len(sendResp.Messages) > 0 {
-				return &MessageSendStruct{Key: &MessageSendKey{ID: sendResp.Messages[0].ID}}, nil
+				return &MessageSendStruct{}, nil
 			}
 			return &MessageSendStruct{}, nil
 		}
@@ -1296,7 +1293,7 @@ func (s *sendService) SendMediaUrl(data *MediaStruct, instance *instance_model.I
 	return s.sendMediaUrlWithRetry(data, instance, 3)
 }
 
-func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
+func (s *sendServiceType) sendMediaUrlWithRetry(data *MediaStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendMediaUrl attempt %d/%d for URL: %s", instance.Id, attempt, maxRetries, data.Url)
 		startTime := time.Now()
@@ -1601,14 +1598,14 @@ func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instanc
 	return nil, fmt.Errorf("failed to send media url after %d attempts", maxRetries)
 }
 
-func (s *sendService) SendPoll(data *PollStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendPoll(data *PollStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
 	return s.sendPollWithRetry(data, instance, 3)
 }
 
-func (s *sendService) sendPollWithRetry(data *PollStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
+func (s *sendServiceType) sendPollWithRetry(data *PollStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendPoll attempt %d/%d", instance.Id, attempt, maxRetries)
 
@@ -1677,7 +1674,7 @@ func convertToWebP(imageData string) ([]byte, error) {
 	return webpBuffer.Bytes(), nil
 }
 
-func (s *sendService) SendSticker(data *StickerStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendSticker(data *StickerStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -1731,7 +1728,7 @@ func (s *sendService) SendSticker(data *StickerStruct, instance *instance_model.
 	return message, nil
 }
 
-func (s *sendService) SendLocation(data *LocationStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendLocation(data *LocationStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -1763,7 +1760,7 @@ func (s *sendService) SendLocation(data *LocationStruct, instance *instance_mode
 	return message, nil
 }
 
-func (s *sendService) SendContact(data *ContactStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendContact(data *ContactStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -1818,7 +1815,7 @@ func mapKeyType(keyType string) string {
 	}
 }
 
-func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendButton(data *ButtonStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -2205,7 +2202,7 @@ func unwrapDocumentWithCaption(msg *waE2E.Message) *waE2E.Message {
 // sendInteractive sends a button or list message. WhatsApp rejects the biz/bot
 // stanza nodes for some accounts (server error 405/473), so on a server
 // rejection it retries with fewer nodes and, last, without the wrapper.
-func (s *sendService) sendInteractive(instance *instance_model.Instance, msg *waE2E.Message, messageType string, data *SendDataStruct, nodes []waBinary.Node) (*MessageSendStruct, error) {
+func (s *sendServiceType) sendInteractive(instance *instance_model.Instance, msg *waE2E.Message, messageType string, data *SendDataStruct, nodes []waBinary.Node) (*MessageSendStruct, error) {
 	log := s.loggerWrapper.GetLogger(instance.Id)
 	var lastErr error
 	for i, v := range interactiveVariants(nodes) {
@@ -2400,7 +2397,7 @@ func sectionsToString(data *ListStruct) (string, error) {
 	return string(jsonData), nil
 }
 
-func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendList(data *ListStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -2505,7 +2502,7 @@ func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instan
 	return message, nil
 }
 
-func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.Message, messageType string, data *SendDataStruct) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendMessage(instance *instance_model.Instance, msg *waE2E.Message, messageType string, data *SendDataStruct) (*MessageSendStruct, error) {
 	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendMessage called for number: %s, type: %s", instance.Id, data.Number, messageType)
 
 	recipient, err := s.validateAndCheckUserExists(data.Number, data.FormatJid, &data.Quoted.MessageID, &data.Quoted.MessageID, instance)
@@ -3060,7 +3057,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 	return messageSent, nil
 }
 
-func (s *sendService) SendCarousel(data *CarouselStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendCarousel(data *CarouselStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -3287,7 +3284,7 @@ func (s *sendService) SendCarousel(data *CarouselStruct, instance *instance_mode
 	return message, nil
 }
 
-func (s *sendService) SendStatusText(data *StatusTextStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendStatusText(data *StatusTextStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -3346,7 +3343,7 @@ func (s *sendService) SendStatusText(data *StatusTextStruct, instance *instance_
 	return messageSent, nil
 }
 
-func (s *sendService) SendStatusMediaUrl(data *StatusMediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendStatusMediaUrl(data *StatusMediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -3387,7 +3384,7 @@ func (s *sendService) SendStatusMediaUrl(data *StatusMediaStruct, instance *inst
 	return s.sendStatusMedia(client, data, fileData, instance)
 }
 
-func (s *sendService) SendStatusMediaFile(data *StatusMediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendStatusMediaFile(data *StatusMediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
 	}
@@ -3403,7 +3400,7 @@ func (s *sendService) SendStatusMediaFile(data *StatusMediaStruct, fileData []by
 	return s.sendStatusMedia(client, data, fileData, instance)
 }
 
-func (s *sendService) sendStatusMedia(client *whatsmeow.Client, data *StatusMediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
+func (s *sendServiceType) sendStatusMedia(client *whatsmeow.Client, data *StatusMediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	mime, _ := mimetype.DetectReader(bytes.NewReader(fileData))
 	mimeType := mime.String()
 
@@ -3507,7 +3504,7 @@ func (s *sendService) sendStatusMedia(client *whatsmeow.Client, data *StatusMedi
 	return messageSent, nil
 }
 
-func (s *sendService) sendStatusWebhook(messageSent *MessageSendStruct, instance *instance_model.Instance, messageType string) {
+func (s *sendServiceType) sendStatusWebhook(messageSent *MessageSendStruct, instance *instance_model.Instance, messageType string) {
 	postMap := make(map[string]interface{})
 	postMap["event"] = "SendStatus"
 	messageData := make(map[string]interface{})
@@ -3543,7 +3540,7 @@ func (s *sendService) sendStatusWebhook(messageSent *MessageSendStruct, instance
 
 // SendTemplate sends a template message via the Cloud API (engine cloudapi).
 // For whatsmeow engine, templates are not supported via this method.
-func (s *sendService) SendTemplate(instance *instance_model.Instance, to string, template map[string]interface{}) (*MessageSendStruct, error) {
+func (s *sendServiceType) SendTemplate(instance *instance_model.Instance, to string, template map[string]interface{}) (*MessageSendStruct, error) {
 	if instance.Engine == "cloudapi" {
 		if !instance.Connected {
 			return nil, fmt.Errorf("instance is not connected")
@@ -3588,11 +3585,12 @@ func (s *sendService) SendTemplate(instance *instance_model.Instance, to string,
 				return nil, err
 			}
 			if sendResp != nil && len(sendResp.Messages) > 0 {
-				return &MessageSendStruct{Key: &MessageSendKey{ID: sendResp.Messages[0].ID}}, nil
+				return &MessageSendStruct{}, nil
 			}
 			return &MessageSendStruct{}, nil
+		}
 	}
-	return nil, fmt.Errorf("template messages require cloudapi engine")
+	return nil, fmt.Errorf("engine not supported: %s", instance.Engine)
 }
 
 func NewSendService(
@@ -3602,7 +3600,7 @@ func NewSendService(
 	config *config.Config,
 	loggerWrapper *logger_wrapper.LoggerManager,
 ) SendService {
-	svc := &sendService{
+	svc := &sendServiceType{
 		clientPointer:    clientPointer,
 		whatsmeowService: whatsmeowService,
 		cloudApiService:  cloudApiService,
