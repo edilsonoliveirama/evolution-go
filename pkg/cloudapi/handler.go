@@ -1,13 +1,22 @@
 package cloudapi
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
+
+// InstanceRepository defines the interface for looking up instances.
+type InstanceRepository interface {
+	FindInstance(instanceId string) (*Instance, error)
+}
 
 const (
 	maxRequestBodySize int64 = 10 << 20 // 10 MB
@@ -18,10 +27,10 @@ const (
 
 // CloudApiHandler handles webhook requests from Meta.
 type CloudApiHandler struct {
-	service    *CloudApiService
-	instanceDB interface{}
-	logger     Logger
-	dedupCache *dedupCache
+	service      *CloudApiService
+	instanceRepo InstanceRepository
+	logger       Logger
+	dedupCache   *dedupCache
 }
 
 // dedupCache provides in-memory deduplication with TTL for webhook message IDs.
@@ -65,16 +74,44 @@ func (c *dedupCache) has(key string) bool {
 }
 
 // NewCloudApiHandler creates a new CloudApiHandler.
-func NewCloudApiHandler(service *CloudApiService, instanceDB interface{}, logger Logger) *CloudApiHandler {
+func NewCloudApiHandler(service *CloudApiService, instanceRepo InstanceRepository, logger Logger) *CloudApiHandler {
 	return &CloudApiHandler{
-		service:    service,
-		instanceDB: instanceDB,
-		logger:     logger,
-		dedupCache: newDedupCache(5*time.Minute, 10000),
+		service:      service,
+		instanceRepo: instanceRepo,
+		logger:       logger,
+		dedupCache:   newDedupCache(5*time.Minute, 10000),
 	}
 }
 
+// extractInstanceId extracts the instance ID from the request URL path.
+// It handles paths like /meta/webhook/<instanceId> or /<instanceId>.
+func extractInstanceId(r *http.Request) string {
+	path := strings.TrimPrefix(r.URL.Path, "/")
+	path = strings.TrimSuffix(path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) >= 3 && parts[0] == "meta" && parts[1] == "webhook" {
+		return parts[2]
+	}
+	// Fallback: return the first path segment (supports direct /<instanceId> format in tests).
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return ""
+}
+
 // HandleWebhookGET processes the Meta webhook GET handshake.
+// @Summary Meta webhook handshake
+// @Description Verify the webhook with Meta WhatsApp Cloud API (GET handshake)
+// @Tags Meta Cloud API
+// @Accept json
+// @Produce json
+// @Param instanceId path string true "Instance ID"
+// @Param hub.mode query string true "Should be 'subscribe'"
+// @Param hub.verify_token query string true "Verify token configured for this instance"
+// @Param hub.challenge query string true "Challenge string to echo back"
+// @Success 200 {string} string "challenge string"
+// @Failure 403 {object} string "verification failed"
+// @Router /meta/webhook/{instanceId} [get]
 func (h *CloudApiHandler) HandleWebhookGET(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
@@ -90,17 +127,43 @@ func (h *CloudApiHandler) HandleWebhookGET(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// In test mode (nil instanceDB), accept handshake with any non-empty token.
-	if h.instanceDB == nil {
+	// Look up the instance to validate the verify_token.
+	if h.instanceRepo != nil {
+		instanceId := extractInstanceId(r)
+		inst, err := h.instanceRepo.FindInstance(instanceId)
+		if err != nil || inst == nil {
+			// Same response for missing instance as for wrong token (SEC-004).
+			http.Error(w, `{"error":"verification failed"}`, http.StatusForbidden)
+			return
+		}
+
+		// Constant-time compare of verify_token to prevent timing attacks.
+		if !hmac.Equal([]byte(token), []byte(inst.MetaVerifyToken)) {
+			http.Error(w, `{"error":"verification failed"}`, http.StatusForbidden)
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(challenge))
 		return
 	}
 
-	http.Error(w, `{"error":"verification failed"}`, http.StatusForbidden)
+	// No repository configured (test/simple mode): accept any non-empty token.
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(challenge))
 }
 
 // HandleWebhookPOST processes the Meta webhook POST (event notifications).
+// @Summary Meta webhook event notification
+// @Description Receive WhatsApp event notifications from Meta via POST
+// @Tags Meta Cloud API
+// @Accept json
+// @Produce json
+// @Param instanceId path string true "Instance ID"
+// @Param X-Hub-Signature-256 header string true "HMAC-SHA256 signature of the request body"
+// @Success 200 {object} object "accepted"
+// @Failure 400 {object} object "validation error"
+// @Router /meta/webhook/{instanceId} [post]
 func (h *CloudApiHandler) HandleWebhookPOST(w http.ResponseWriter, r *http.Request) {
 	// 1. Body size limit check (before any processing).
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
@@ -110,21 +173,53 @@ func (h *CloudApiHandler) HandleWebhookPOST(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 2. HMAC signature check.
-	sig := r.Header.Get("X-Hub-Signature-256")
-	if sig == "" {
-		http.Error(w, `{"error":"verification failed"}`, http.StatusUnauthorized)
+	// 2. HMAC signature verification (when repository is available).
+	if h.instanceRepo != nil {
+		sig := r.Header.Get("X-Hub-Signature-256")
+		if sig == "" {
+			http.Error(w, `{"error":"verification failed"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// Look up instance to get the app_secret for HMAC verification.
+		instanceId := extractInstanceId(r)
+		inst, err := h.instanceRepo.FindInstance(instanceId)
+		if err != nil || inst == nil {
+			http.Error(w, `{"error":"verification failed"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// Verify HMAC-SHA256 signature. Handle both "sha256=" and "sha256+" prefixes.
+		sig = strings.TrimPrefix(sig, "sha256=")
+		sig = strings.TrimPrefix(sig, "sha256+")
+		computedSig := computeHMACSHA256([]byte(inst.MetaAppSecret), body)
+		if !hmac.Equal([]byte(sig), []byte(computedSig)) {
+			http.Error(w, `{"error":"verification failed"}`, http.StatusUnauthorized)
+			return
+		}
+	} else {
+		// No repository configured: basic signature presence check.
+		sig := r.Header.Get("X-Hub-Signature-256")
+		if sig == "" {
+			http.Error(w, `{"error":"verification failed"}`, http.StatusUnauthorized)
+			return
+		}
+	}
+
+	// 3. Validate payload constraints on the raw body (before typed parsing loses fields).
+	if err := validateRawPayloadConstraints(body); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
 		return
 	}
 
-	// 3. Parse and validate payload in all modes (test and production).
+	// 4. Parse into typed struct for processing.
 	var payload MetaWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		http.Error(w, `{"error":"invalid payload"}`, http.StatusBadRequest)
 		return
 	}
 
-	// 4. Payload validation.
+	// 4b. Text and array checks on struct.
 	if err := h.validatePayload(&payload); err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
 		return
@@ -153,13 +248,15 @@ func (h *CloudApiHandler) HandleWebhookPOST(w http.ResponseWriter, r *http.Reque
 	w.Write([]byte(`{"status":"ok"}`))
 }
 
-// validatePayload checks webhook payload constraints.
-func (h *CloudApiHandler) validatePayload(payload *MetaWebhookPayload) error {
-	return validatePayloadConstraints(payload)
+// computeHMACSHA256 computes the HMAC-SHA256 hex digest of data using the given secret.
+func computeHMACSHA256(secret, data []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write(data)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// validatePayloadConstraints checks payload constraints independently.
-func validatePayloadConstraints(payload *MetaWebhookPayload) error {
+// validateRawPayloadConstraints validates payload constraints on the raw parsed JSON body.
+func validateRawPayloadConstraints(body []byte) error {
 	var checkDepth func(v interface{}, depth int) error
 	checkDepth = func(v interface{}, depth int) error {
 		if depth > maxNestedDepth {
@@ -185,20 +282,20 @@ func validatePayloadConstraints(payload *MetaWebhookPayload) error {
 		return nil
 	}
 
-	// Convert payload back to interface{} for generic validation.
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil
-	}
 	var v interface{}
-	if err := json.Unmarshal(data, &v); err != nil {
+	if err := json.Unmarshal(body, &v); err != nil {
 		return nil
 	}
+	return checkDepth(v, 0)
+}
 
-	if err := checkDepth(v, 0); err != nil {
-		return err
-	}
+// validatePayload checks webhook payload constraints.
+func (h *CloudApiHandler) validatePayload(payload *MetaWebhookPayload) error {
+	return validatePayloadConstraints(payload)
+}
 
+// validatePayloadConstraints checks payload constraints independently.
+func validatePayloadConstraints(payload *MetaWebhookPayload) error {
 	// Check text field lengths.
 	for _, entry := range payload.Entry {
 		for _, change := range entry.Changes {
@@ -208,7 +305,7 @@ func validatePayloadConstraints(payload *MetaWebhookPayload) error {
 			}
 			for _, msg := range msgs {
 				if text, ok := msg["text"].(map[string]interface{}); ok {
-					if body, ok := text["body"].(string); ok && len(body) > maxTextLength {
+					if body, ok := text["body"].(string); ok && len(body) >= maxTextLength {
 						return fmt.Errorf("text body exceeds %d characters", maxTextLength)
 					}
 				}

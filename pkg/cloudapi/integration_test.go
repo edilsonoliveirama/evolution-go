@@ -70,7 +70,7 @@ func TestIntegration_WebhookHandshakeAndPOST(t *testing.T) {
 	verifyToken := "integration-verify-token"
 
 	// First do GET handshake
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", verifyToken, appSecret)
 
 	getReq := httptest.NewRequest(http.MethodGet,
 		fmt.Sprintf("/meta/webhook/test-instance-id?hub.mode=subscribe&hub.verify_token=%s&hub.challenge=challenge-ok", verifyToken),
@@ -202,7 +202,7 @@ func TestIntegration_EventMapping_MessageAndStatus(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", "any-token", appSecret)
 	handler.HandleWebhookPOST(w, req)
 
 	if w.Code != http.StatusOK {

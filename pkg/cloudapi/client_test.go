@@ -409,7 +409,7 @@ func contains(s, substr string) bool {
 // --- Security: SEC-002 — Webhook body size limit ---
 
 func TestWebhookBodySizeLimit(t *testing.T) {
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", "any-token", "body-size-secret")
 
 	// Build a body larger than the default limit (10 MB).
 	body := make([]byte, 11<<20) // 11 MB
@@ -449,7 +449,7 @@ func TestWebhookBodySizeLimit_UnderLimit(t *testing.T) {
 // --- Security: SEC-004 — Instance enumeration protection ---
 
 func TestHandleWebhookGET_IdenticalResponseForMissingInstance(t *testing.T) {
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("some-other-instance-id", "some-token", "some-secret")
 
 	// Generate a valid UUID-like instanceId that doesn't exist.
 	unknownUUID := "550e8400-e29b-41d4-a716-446655440000"

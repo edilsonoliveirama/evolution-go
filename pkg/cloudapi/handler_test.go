@@ -9,8 +9,46 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 )
+
+// mockInstanceRepo is a simple in-memory instance repository for testing.
+type mockInstanceRepo struct {
+	mu        sync.Mutex
+	instances map[string]*Instance
+}
+
+func newMockInstanceRepo() *mockInstanceRepo {
+	return &mockInstanceRepo{
+		instances: make(map[string]*Instance),
+	}
+}
+
+func (m *mockInstanceRepo) FindInstance(instanceId string) (*Instance, error) {
+	if m == nil {
+		return nil, fmt.Errorf("instance repository not configured")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	inst, ok := m.instances[instanceId]
+	if !ok {
+		return nil, fmt.Errorf("instance not found")
+	}
+	return inst, nil
+}
+
+// defaultTestHandler creates a handler with a mock repo pre-configured with a test instance.
+func defaultTestHandler(instanceId, verifyToken, appSecret string) *CloudApiHandler {
+	repo := newMockInstanceRepo()
+	if instanceId != "" {
+		repo.instances[instanceId] = &Instance{
+			MetaVerifyToken: verifyToken,
+			MetaAppSecret:   appSecret,
+		}
+	}
+	return NewCloudApiHandler(nil, repo, nil)
+}
 
 // AC: CLOUD-09 — Webhook GET handshake with verify token.
 // AC: CLOUD-10 — Webhook POST HMAC SHA-256 signature validation.
@@ -48,9 +86,9 @@ import (
 //	}
 
 func TestHandleWebhookGET_ValidToken(t *testing.T) {
-	handler := NewCloudApiHandler(nil, nil, nil)
 	instanceId := "test-instance-id"
 	verifyToken := "meu-verify-token-seguro"
+	handler := defaultTestHandler(instanceId, verifyToken, "my-app-secret-key-12345")
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/meta/webhook/%s?hub.mode=subscribe&hub.verify_token=%s&hub.challenge=123456789", instanceId, verifyToken), nil)
 	w := httptest.NewRecorder()
@@ -68,8 +106,8 @@ func TestHandleWebhookGET_ValidToken(t *testing.T) {
 }
 
 func TestHandleWebhookGET_InvalidToken(t *testing.T) {
-	handler := NewCloudApiHandler(nil, nil, nil)
 	instanceId := "test-instance-id"
+	handler := defaultTestHandler(instanceId, "meu-verify-token-seguro", "my-app-secret-key-12345")
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/meta/webhook/%s?hub.mode=subscribe&hub.verify_token=wrong-token&hub.challenge=123456789", instanceId), nil)
 	w := httptest.NewRecorder()
@@ -140,7 +178,7 @@ func TestHandleWebhookPOST_ValidSignature(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", "any-token", appSecret)
 	// The handler should decrypt the instance's app_secret, verify the HMAC,
 	// process the message, and return 200.
 	handler.HandleWebhookPOST(w, req)
@@ -151,18 +189,19 @@ func TestHandleWebhookPOST_ValidSignature(t *testing.T) {
 }
 
 func TestHandleWebhookPOST_InvalidSignature(t *testing.T) {
+	instanceId := "test-instance-id"
 	payload := map[string]interface{}{
 		"object": "whatsapp_business_account",
 		"entry":  []map[string]interface{}{},
 	}
 	bodyBytes, _ := json.Marshal(payload)
 
-	req := httptest.NewRequest(http.MethodPost, "/meta/webhook/test-instance-id", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest(http.MethodPost, "/meta/webhook/"+instanceId, bytes.NewReader(bodyBytes))
 	req.Header.Set("X-Hub-Signature-256", "sha256=invalid_signature_here")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler(instanceId, "my-verify-token", "my-app-secret")
 	handler.HandleWebhookPOST(w, req)
 
 	if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
@@ -230,7 +269,7 @@ func TestHandleWebhookPOST_StatusUpdate_Sent(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", "any-token", appSecret)
 	handler.HandleWebhookPOST(w, req)
 
 	if w.Code != http.StatusOK {
@@ -286,7 +325,7 @@ func TestHandleWebhookPOST_StatusUpdate_Failed(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", "any-token", appSecret)
 	handler.HandleWebhookPOST(w, req)
 
 	if w.Code != http.StatusOK {
@@ -335,7 +374,7 @@ func TestHandleWebhookPOST_StatusUpdate_Read(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", "any-token", appSecret)
 	handler.HandleWebhookPOST(w, req)
 
 	if w.Code != http.StatusOK {
@@ -395,7 +434,7 @@ func TestHandleWebhookPOST_InboundMessage_EmitsEvent(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handler := NewCloudApiHandler(nil, nil, nil)
+	handler := defaultTestHandler("test-instance-id", "any-token", appSecret)
 	handler.HandleWebhookPOST(w, req)
 
 	if w.Code != http.StatusOK {
