@@ -66,6 +66,15 @@ type Config struct {
 	MetricsTimezone      string
 	MetricsRetentionDays int
 
+	// Meta Cloud API configurations
+	MetaCredentialsEncryptionKey        string
+	MetaCredentialsEncryptionKeyPrev    string
+	MetaGraphApiVersion                 string
+	MetaHttpTimeout                     string
+	MetaWebhookMaxBodySize              string
+	MetaHealthCheckInterval             string
+	MetaMediaUrlAllowlist               string
+
 	// Logger configurations
 	LogMaxSize    int
 	LogMaxBackups int
@@ -357,6 +366,24 @@ func Load() *Config {
 		metricsRetentionDays = 90
 	}
 
+	metaGraphApiVersion := os.Getenv(config_env.META_GRAPH_API_VERSION)
+	if metaGraphApiVersion == "" {
+		metaGraphApiVersion = "v22.0"
+	}
+	metaHttpTimeout := os.Getenv(config_env.META_HTTP_TIMEOUT)
+	if metaHttpTimeout == "" {
+		metaHttpTimeout = "30"
+	}
+	metaWebhookMaxBodySize := os.Getenv(config_env.META_WEBHOOK_MAX_BODY_SIZE)
+	if metaWebhookMaxBodySize == "" {
+		metaWebhookMaxBodySize = "10"
+	}
+	metaHealthCheckInterval := os.Getenv(config_env.META_HEALTH_CHECK_INTERVAL)
+	if metaHealthCheckInterval == "" {
+		metaHealthCheckInterval = "5"
+	}
+	metaMediaUrlAllowlist := os.Getenv(config_env.META_MEDIA_URL_ALLOWLIST)
+
 	config := &Config{
 		PostgresAuthDB:       postgresAuthDB,
 		postgresUsersDB:      postgresUsersDB,
@@ -393,9 +420,16 @@ func Load() *Config {
 		ChatwootImportDBURI:  os.Getenv(config_env.CHATWOOT_IMPORT_DATABASE_URI),
 		HistorySyncDaysLimit: historySyncDaysLimit,
 		MetricsTimezone:      metricsTimezone,
-		MetricsRetentionDays: metricsRetentionDays,
-		AmqpGlobalEvents:     amqpGlobalEvents,
-		AmqpSpecificEvents:   amqpSpecificEvents,
+		MetricsRetentionDays:            metricsRetentionDays,
+		MetaCredentialsEncryptionKey:    os.Getenv(config_env.META_CREDENTIALS_ENCRYPTION_KEY),
+		MetaCredentialsEncryptionKeyPrev: os.Getenv(config_env.META_CREDENTIALS_ENCRYPTION_KEY_PREVIOUS),
+		MetaGraphApiVersion:             metaGraphApiVersion,
+		MetaHttpTimeout:                 metaHttpTimeout,
+		MetaWebhookMaxBodySize:          metaWebhookMaxBodySize,
+		MetaHealthCheckInterval:         metaHealthCheckInterval,
+		MetaMediaUrlAllowlist:           metaMediaUrlAllowlist,
+		AmqpGlobalEvents:                amqpGlobalEvents,
+		AmqpSpecificEvents:              amqpSpecificEvents,
 		NatsUrl:              natsUrl,
 		NatsGlobalEnabled:    natsGlobalEnabled == "true",
 		NatsGlobalEvents:     natsGlobalEvents,

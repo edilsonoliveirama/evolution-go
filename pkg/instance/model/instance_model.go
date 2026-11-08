@@ -26,6 +26,18 @@ type Instance struct {
 	ClientName       string    `json:"client_name"`
 	CreatedAt        time.Time `json:"createdAt" gorm:"autoCreateTime"`
 
+	// Engine type: "whatsmeow" (default) | "cloudapi"
+	Engine string `json:"engine" gorm:"default:whatsmeow"`
+
+	// Cloud API credentials (engine == "cloudapi")
+	MetaWabaId        string `json:"metaWabaId,omitempty" gorm:"column:meta_waba_id"`
+	MetaPhoneNumberId string `json:"-" gorm:"column:meta_phone_number_id"`   // sempre mascarado em respostas JSON
+	MetaToken         string `json:"-" gorm:"column:meta_token"`             // encrypted at rest, nunca exposto
+	MetaAppSecret     string `json:"-" gorm:"column:meta_app_secret"`        // encrypted at rest, nunca exposto
+	MetaVerifyToken   string `json:"-" gorm:"column:meta_verify_token"`      // encrypted at rest, nunca exposto
+	MetaBusinessName  string `json:"metaBusinessName,omitempty" gorm:"column:meta_business_name"`
+	MetaPhoneNumber   string `json:"metaPhoneNumber,omitempty" gorm:"column:meta_phone_number"`
+
 	// Advanced Settings
 	AlwaysOnline  bool   `json:"alwaysOnline" gorm:"default:false"`
 	RejectCall    bool   `json:"rejectCall" gorm:"default:false"`
