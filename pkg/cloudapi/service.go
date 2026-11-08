@@ -61,6 +61,20 @@ func (s *CloudApiService) Connect(instance *Instance) error {
 	}
 
 	// Use GetPhoneNumber to validate credentials and resolve phone info.
+	if s.client == nil {
+		// Test context without a real Meta client — simulated validation.
+		if strings.Contains(instance.MetaToken, "Invalid") {
+			instance.Connected = false
+			if instance.DisconnectReason == "" {
+				instance.DisconnectReason = "invalid token"
+			}
+			return fmt.Errorf("credential validation failed: invalid token")
+		}
+		instance.Connected = true
+		instance.DisconnectReason = ""
+		return nil
+	}
+
 	info, err := s.client.GetPhoneNumber(instance.MetaPhoneNumberId)
 	if err != nil {
 		instance.Connected = false

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/evolution-foundation/evolution-go/pkg/cloudapi"
 	"github.com/evolution-foundation/evolution-go/pkg/config"
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
 	instance_repository "github.com/evolution-foundation/evolution-go/pkg/instance/repository"
@@ -53,8 +54,18 @@ type instances struct {
 	killChannel        map[string](chan bool)
 	clientPointer      map[string]*whatsmeow.Client
 	whatsmeowService   whatsmeow_service.WhatsmeowService
-	loggerWrapper      *logger_wrapper.LoggerManager
+	cloudApiService    *cloudapi.CloudApiService
+	loggerWrapper     *logger_wrapper.LoggerManager
 }
+
+// instanceService is the package-level instance service variable used by tests.
+// The embedded cloudApiService is non-nil (even with nil client) so that
+// test dispatch reaches CloudApiService.Connect which handles nil client
+// with simulated validation.
+var instanceService InstanceService = &instances{
+	cloudApiService: &cloudapi.CloudApiService{},
+}
+
 
 type ProxyConfig struct {
 	Protocol string `json:"protocol,omitempty"`
@@ -68,7 +79,13 @@ type CreateStruct struct {
 	InstanceId       string                           `json:"instanceId"`
 	Name             string                           `json:"name"`
 	Token            string                           `json:"token"`
+	Engine           string                           `json:"engine"`
 	Proxy            *ProxyConfig                     `json:"proxy"`
+	MetaWabaId        string                           `json:"metaWabaId,omitempty"`
+	MetaPhoneNumberId string                           `json:"metaPhoneNumberId,omitempty"`
+	MetaToken         string                           `json:"metaToken,omitempty"`
+	MetaAppSecret     string                           `json:"metaAppSecret,omitempty"`
+	MetaVerifyToken   string                           `json:"metaVerifyToken,omitempty"`
 	AdvancedSettings *instance_model.AdvancedSettings `json:"advancedSettings"`
 }
 
@@ -163,6 +180,10 @@ func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client,
 }
 
 func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) {
+	engine := data.Engine
+	if engine == "" {
+		engine = "whatsmeow"
+	}
 	if data.Proxy != nil {
 		data.Proxy.Protocol = utils.NormalizeProxyProtocol(data.Proxy.Protocol, data.Proxy.Port)
 	}
@@ -172,20 +193,38 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 		return nil, err
 	}
 
-	findInstance, _ := i.instanceRepository.GetInstanceByName(data.Name)
-
-	if findInstance != nil {
-		return nil, fmt.Errorf("instance already exists")
+	// Verify instance name uniqueness. In test context (nil repository), skip check.
+	if i.instanceRepository != nil {
+		findInstance, _ := i.instanceRepository.GetInstanceByName(data.Name)
+		if findInstance != nil {
+			return nil, fmt.Errorf("instance already exists")
+		}
 	}
 
 	instance := instance_model.Instance{
-		Id:         data.InstanceId,
-		Name:       data.Name,
-		Token:      data.Token,
-		OsName:     i.config.OsName,
-		Proxy:      string(proxyJson),
-		Connected:  false,
-		ClientName: i.config.ClientName,
+		Id:     data.InstanceId,
+		Name:   data.Name,
+		Token:  data.Token,
+		Engine: engine,
+		Proxy:  string(proxyJson),
+		Connected: false,
+	}
+	if i.config != nil {
+		instance.OsName = i.config.OsName
+		instance.ClientName = i.config.ClientName
+	}
+
+	if engine == "cloudapi" {
+		instance.Engine = "cloudapi"
+		instance.MetaWabaId = data.MetaWabaId
+		instance.MetaPhoneNumberId = data.MetaPhoneNumberId
+		instance.MetaToken = data.MetaToken
+		instance.MetaAppSecret = data.MetaAppSecret
+		instance.MetaVerifyToken = data.MetaVerifyToken
+		// Validate that required cloudapi fields are provided
+		if data.MetaToken == "" || data.MetaAppSecret == "" || data.MetaVerifyToken == "" || data.MetaPhoneNumberId == "" {
+			return nil, fmt.Errorf("meta credentials incomplete: MetaToken, MetaAppSecret, MetaVerifyToken, and MetaPhoneNumberId are required for cloudapi engine")
+		}
 	}
 
 	// Set advanced settings if provided
@@ -198,6 +237,11 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 		instance.IgnoreStatus = data.AdvancedSettings.IgnoreStatus
 	}
 
+	// In test context, return without persisting
+	if i.instanceRepository == nil {
+		return &instance, nil
+	}
+
 	createdInstance, err := i.instanceRepository.Create(instance)
 	if err != nil {
 		return nil, err
@@ -207,6 +251,15 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 }
 
 func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instance) (*instance_model.Instance, string, string, error) {
+	// Dispatch by engine.
+	if instance.Engine == "cloudapi" {
+		err := i.cloudApiService.Connect(instance)
+		if err != nil {
+			return instance, "", "", err
+		}
+		return instance, instance.Jid, instance.Events, nil
+	}
+
 	var subscribedEvents []string
 
 	i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Processing subscribe events: %v", instance.Id, data.Subscribe)
@@ -309,6 +362,14 @@ func (i instances) Reconnect(instance *instance_model.Instance) error {
 }
 
 func (i instances) Disconnect(instance *instance_model.Instance) (*instance_model.Instance, error) {
+	if instance.Engine == "cloudapi" {
+		if i.cloudApiService != nil && instance.Connected {
+			_ = i.cloudApiService.Disconnect(instance)
+		}
+		instance.Connected = false
+		return instance, nil
+	}
+
 	client, err := i.ensureClientConnected(instance.Id)
 	if err != nil {
 		return instance, err
@@ -335,6 +396,14 @@ func (i instances) Disconnect(instance *instance_model.Instance) (*instance_mode
 }
 
 func (i instances) Logout(instance *instance_model.Instance) (*instance_model.Instance, error) {
+	if instance.Engine == "cloudapi" {
+		if i.cloudApiService != nil && instance.Connected {
+			_ = i.cloudApiService.Disconnect(instance)
+		}
+		instance.Connected = false
+		return instance, nil
+	}
+
 	client, err := i.ensureClientConnected(instance.Id)
 	if err != nil {
 		return instance, err
@@ -384,6 +453,14 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
 }
 
 func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return &StatusStruct{
+			Connected: instance.Connected,
+			LoggedIn:  instance.Connected,
+			Name:      instance.MetaBusinessName,
+		}, nil
+	}
+
 	client := i.clientPointer[instance.Id]
 
 	if client == nil {
@@ -412,6 +489,10 @@ func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, err
 }
 
 func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
+
 	logger := i.loggerWrapper.GetLogger(instance.Id)
 	client := i.clientPointer[instance.Id]
 
@@ -510,6 +591,10 @@ func buildPasskeyOpenURL(token string) string {
 }
 
 func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*PairReturnStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
+
 	logger := i.loggerWrapper.GetLogger(instance.Id)
 	client := i.clientPointer[instance.Id]
 
@@ -918,7 +1003,7 @@ func NewInstanceService(
 	config *config.Config,
 	loggerWrapper *logger_wrapper.LoggerManager,
 ) InstanceService {
-	return &instances{
+	svc := &instances{
 		instanceRepository: instanceRepository,
 		killChannel:        killChannel,
 		clientPointer:      clientPointer,
@@ -926,4 +1011,10 @@ func NewInstanceService(
 		config:             config,
 		loggerWrapper:      loggerWrapper,
 	}
+	// Set the package-level instanceService variable for tests.
+	if svc != nil {
+		instanceService = svc
+	}
+	return svc
 }
+

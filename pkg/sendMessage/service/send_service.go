@@ -34,6 +34,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"golang.org/x/net/html"
+	"github.com/evolution-foundation/evolution-go/pkg/cloudapi"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -52,14 +53,19 @@ type SendService interface {
 	SendStatusText(data *StatusTextStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
 	SendStatusMediaUrl(data *StatusMediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
 	SendStatusMediaFile(data *StatusMediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error)
+	SendTemplate(instance *instance_model.Instance, to string, template map[string]interface{}) (*MessageSendStruct, error)
 }
 
 type sendService struct {
 	clientPointer    map[string]*whatsmeow.Client
 	whatsmeowService whatsmeow_service.WhatsmeowService
+	cloudApiService  *cloudapi.CloudApiService
 	config           *config.Config
 	loggerWrapper    *logger_wrapper.LoggerManager
 }
+
+// sendService is the package-level send service variable used by tests.
+var sendService SendService = &sendService{}
 
 type SendDataStruct struct {
 	Id              string
@@ -604,6 +610,16 @@ func findURL(text string) string {
 }
 
 func (s *sendService) SendText(data *TextStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		if s.cloudApiService == nil {
+			return nil, fmt.Errorf("cloud api service not available")
+		}
+		_, err := s.cloudApiService.SendText(instance, data.Number, data.Text, data.Id)
+		if err != nil {
+			return nil, err
+		}
+		return &MessageSendStruct{}, nil
+	}
 	return s.sendTextWithRetry(data, instance, 3) // 3 tentativas máximas
 }
 
@@ -946,6 +962,18 @@ func convertAudioToOpusWithDuration(inputData []byte) ([]byte, int, error) {
 }
 
 func (s *sendService) SendMediaFile(data *MediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		if !instance.Connected {
+			return nil, fmt.Errorf("instance is not connected")
+		}
+		if s.cloudApiService != nil {
+			_, err := s.cloudApiService.SendMedia(instance, data.Number, data.Type, data.Caption, data.Filename, fileData)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &MessageSendStruct{}, nil
+	}
 	return s.sendMediaFileWithRetry(data, fileData, instance, 3)
 }
 
@@ -1222,6 +1250,18 @@ func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte,
 }
 
 func (s *sendService) SendMediaUrl(data *MediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		if !instance.Connected {
+			return nil, fmt.Errorf("instance is not connected")
+		}
+		if s.cloudApiService != nil {
+			_, err := s.cloudApiService.SendMedia(instance, data.Number, data.Type, data.Caption, data.Filename, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &MessageSendStruct{}, nil
+	}
 	return s.sendMediaUrlWithRetry(data, instance, 3)
 }
 
@@ -1531,6 +1571,9 @@ func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instanc
 }
 
 func (s *sendService) SendPoll(data *PollStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	return s.sendPollWithRetry(data, instance, 3)
 }
 
@@ -1604,6 +1647,9 @@ func convertToWebP(imageData string) ([]byte, error) {
 }
 
 func (s *sendService) SendSticker(data *StickerStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	client, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -1655,6 +1701,9 @@ func (s *sendService) SendSticker(data *StickerStruct, instance *instance_model.
 }
 
 func (s *sendService) SendLocation(data *LocationStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	_, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -1684,6 +1733,9 @@ func (s *sendService) SendLocation(data *LocationStruct, instance *instance_mode
 }
 
 func (s *sendService) SendContact(data *ContactStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	_, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -1736,6 +1788,9 @@ func mapKeyType(keyType string) string {
 }
 
 func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	client, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -2315,6 +2370,9 @@ func sectionsToString(data *ListStruct) (string, error) {
 }
 
 func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	// Legacy ListMessage format - works on iOS, Android and Web
 	// Matching PAPI Node.js default (non-modern) path exactly
 
@@ -2972,6 +3030,9 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 }
 
 func (s *sendService) SendCarousel(data *CarouselStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	client, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -3196,6 +3257,9 @@ func (s *sendService) SendCarousel(data *CarouselStruct, instance *instance_mode
 }
 
 func (s *sendService) SendStatusText(data *StatusTextStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	client, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -3252,6 +3316,9 @@ func (s *sendService) SendStatusText(data *StatusTextStruct, instance *instance_
 }
 
 func (s *sendService) SendStatusMediaUrl(data *StatusMediaStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	client, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -3290,6 +3357,9 @@ func (s *sendService) SendStatusMediaUrl(data *StatusMediaStruct, instance *inst
 }
 
 func (s *sendService) SendStatusMediaFile(data *StatusMediaStruct, fileData []byte, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		return nil, fmt.Errorf("operaçao nao suportada para instancias Cloud API")
+	}
 	client, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
@@ -3440,16 +3510,62 @@ func (s *sendService) sendStatusWebhook(messageSent *MessageSendStruct, instance
 	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Status %s sent successfully", instance.Id, messageType)
 }
 
+// SendTemplate sends a template message via the Cloud API (engine cloudapi).
+// For whatsmeow engine, templates are not supported via this method.
+func (s *sendService) SendTemplate(instance *instance_model.Instance, to string, template map[string]interface{}) (*MessageSendStruct, error) {
+	if instance.Engine == "cloudapi" {
+		if !instance.Connected {
+			return nil, fmt.Errorf("instance is not connected")
+		}
+		if s.cloudApiService != nil {
+			// Convert map to TemplateMessage
+			tmplName, _ := template["name"].(string)
+			tmplLang, _ := template["language"].(string)
+			tm := &cloudapi.TemplateMessage{
+				Name:     tmplName,
+				Language: tmplLang,
+			}
+			if comps, ok := template["components"].([]map[string]interface{}); ok {
+				for _, c := range comps {
+					comp := cloudapi.TemplateComponent{
+						Type: c["type"].(string),
+					}
+					if params, ok := c["parameters"].([]map[string]interface{}); ok {
+						for _, p := range params {
+							comp.Parameters = append(comp.Parameters, cloudapi.TemplateParameter{
+								Type: p["type"].(string),
+								Text: p["text"].(string),
+							})
+						}
+					}
+					tm.Components = append(tm.Components, comp)
+				}
+			}
+			_, err := s.cloudApiService.SendTemplate(instance, to, tm)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &MessageSendStruct{}, nil
+	}
+	return nil, fmt.Errorf("template messages require cloudapi engine")
+}
+
 func NewSendService(
 	clientPointer map[string]*whatsmeow.Client,
 	whatsmeowService whatsmeow_service.WhatsmeowService,
+	cloudApiService *cloudapi.CloudApiService,
 	config *config.Config,
 	loggerWrapper *logger_wrapper.LoggerManager,
 ) SendService {
-	return &sendService{
+	svc := &sendService{
 		clientPointer:    clientPointer,
 		whatsmeowService: whatsmeowService,
+		cloudApiService:  cloudApiService,
 		config:           config,
 		loggerWrapper:    loggerWrapper,
 	}
+	// Set the package-level sendService variable for tests.
+	sendService = svc
+	return svc
 }

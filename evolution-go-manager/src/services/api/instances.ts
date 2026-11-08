@@ -37,6 +37,7 @@ const normalizeInstance = (raw: RawInstance): Instance => {
     apikey: raw.token,
     owner: raw.jid ? raw.jid.split('@')[0] : '',
     profileName: raw.name,
+    engine: raw.engine || 'whatsmeow',
     connected: raw.connected,
     qrcode,
     webhook: raw.webhook || undefined,

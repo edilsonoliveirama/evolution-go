@@ -3,6 +3,7 @@ package instance_service
 import (
 	"testing"
 
+	"github.com/evolution-foundation/evolution-go/pkg/cloudapi"
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
 )
 
@@ -190,5 +191,67 @@ func TestStatus_CloudEngine_NoQR(t *testing.T) {
 	}
 	if status == nil {
 		t.Fatal("Status returned nil (AC: CLOUD-07)")
+	}
+}
+
+// mockInstanceRepo implements instance_repository.InstanceRepository for cloudapi tests.
+type mockInstanceRepo struct{}
+
+func (m *mockInstanceRepo) Create(instance instance_model.Instance) (*instance_model.Instance, error) {
+	return &instance, nil
+}
+func (m *mockInstanceRepo) GetInstanceByID(instanceId string) (*instance_model.Instance, error) {
+	return nil, nil
+}
+func (m *mockInstanceRepo) GetConnectedInstanceByID(instanceId string) (*instance_model.Instance, error) {
+	return nil, nil
+}
+func (m *mockInstanceRepo) GetInstanceByToken(token string) (*instance_model.Instance, error) {
+	return nil, nil
+}
+func (m *mockInstanceRepo) GetInstanceByName(name string) (*instance_model.Instance, error) {
+	if name == "existing-instance" {
+		return &instance_model.Instance{Name: name}, nil
+	}
+	return nil, nil
+}
+func (m *mockInstanceRepo) Update(*instance_model.Instance) error {
+	return nil
+}
+func (m *mockInstanceRepo) UpdateConnected(userId string, status bool, disconnectReason string) error {
+	return nil
+}
+func (m *mockInstanceRepo) UpdateQrcode(userId string, qr string) error {
+	return nil
+}
+func (m *mockInstanceRepo) UpdateProxy(userId string, proxy string) error {
+	return nil
+}
+func (m *mockInstanceRepo) UpdateJid(userId string, jid string) error {
+	return nil
+}
+func (m *mockInstanceRepo) GetAllConnectedInstances() ([]*instance_model.Instance, error) {
+	return nil, nil
+}
+func (m *mockInstanceRepo) GetAllConnectedInstancesByClientName(clientName string) ([]*instance_model.Instance, error) {
+	return nil, nil
+}
+func (m *mockInstanceRepo) GetAll(clientName string) ([]*instance_model.Instance, error) {
+	return nil, nil
+}
+func (m *mockInstanceRepo) Delete(instanceId string) error {
+	return nil
+}
+func (m *mockInstanceRepo) GetAdvancedSettings(instanceId string) (*instance_model.AdvancedSettings, error) {
+	return nil, nil
+}
+func (m *mockInstanceRepo) UpdateAdvancedSettings(instanceId string, settings *instance_model.AdvancedSettings) error {
+	return nil
+}
+
+func init() {
+	instanceService = &instances{
+		cloudApiService:    &cloudapi.CloudApiService{},
+		instanceRepository: &mockInstanceRepo{},
 	}
 }

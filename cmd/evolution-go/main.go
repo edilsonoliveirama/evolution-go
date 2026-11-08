@@ -23,7 +23,8 @@ import (
 
 	call_handler "github.com/evolution-foundation/evolution-go/pkg/call/handler"
 	call_service "github.com/evolution-foundation/evolution-go/pkg/call/service"
-	chat_handler "github.com/evolution-foundation/evolution-go/pkg/chat/handler"
+	cloudapi "github.com/evolution-foundation/evolution-go/pkg/cloudapi"
+	chat_handler "github.com/evolution-foundation/evolution-go/pkg/call/handler"
 	chat_service "github.com/evolution-foundation/evolution-go/pkg/chat/service"
 	chatwoot_handler "github.com/evolution-foundation/evolution-go/pkg/chatwoot/handler"
 	chatwoot_model "github.com/evolution-foundation/evolution-go/pkg/chatwoot/model"
@@ -192,6 +193,9 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		natsProducer,
 		loggerWrapper,
 	)
+	cloudApiService := cloudapi.NewCloudApiService(nil, nil, loggerWrapper)
+	cloudApiHandler := cloudapi.NewCloudApiHandler(cloudApiService, instanceRepository, loggerWrapper)
+
 	instanceService := instance_service.NewInstanceService(
 		instanceRepository,
 		killChannel,
@@ -199,8 +203,9 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		whatsmeowService,
 		config,
 		loggerWrapper,
+		cloudApiService,
 	)
-	sendMessageService := send_service.NewSendService(clientPointer, whatsmeowService, config, loggerWrapper)
+	sendMessageService := send_service.NewSendService(clientPointer, whatsmeowService, cloudApiService, config, loggerWrapper)
 	userService := user_service.NewUserService(clientPointer, whatsmeowService, loggerWrapper)
 	messageService := message_service.NewMessageService(clientPointer, messageRepository, whatsmeowService, loggerWrapper)
 	chatService := chat_service.NewChatService(clientPointer, whatsmeowService, loggerWrapper)

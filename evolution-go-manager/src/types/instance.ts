@@ -10,6 +10,7 @@ export interface RawInstance {
   id: string;
   name: string;
   token: string;
+  engine: 'whatsmeow' | 'cloudapi';
   webhook: string;
   rabbitmqEnable: string;
   websocketEnable: string;
@@ -30,6 +31,10 @@ export interface RawInstance {
   readMessages: boolean;
   ignoreGroups: boolean;
   ignoreStatus: boolean;
+  metaWabaId?: string;
+  metaPhoneNumberId?: string;
+  metaBusinessName?: string;
+  metaPhoneNumber?: string;
 }
 
 // Normalized instance for our app
@@ -43,6 +48,7 @@ export interface Instance {
   profileName?: string;
   profilePicUrl?: string;
   profileStatus?: string;
+  engine?: 'whatsmeow' | 'cloudapi';
   qrcode?: {
     base64?: string;
     code?: string;
@@ -63,12 +69,22 @@ export interface Instance {
   readMessages?: boolean;
   ignoreGroups?: boolean;
   ignoreStatus?: boolean;
+  metaWabaId?: string;
+  metaPhoneNumberId?: string;
+  metaBusinessName?: string;
+  metaPhoneNumber?: string;
 }
 
 export interface CreateInstancePayload {
   instanceId?: string;
   name: string;
   token: string;
+  engine?: 'whatsmeow' | 'cloudapi';
+  metaWabaId?: string;
+  metaPhoneNumberId?: string;
+  metaToken?: string;
+  metaAppSecret?: string;
+  metaVerifyToken?: string;
   proxy?: {
     host: string;
     port: string;
